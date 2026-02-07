@@ -96,10 +96,10 @@ Demo credentials for evaluation:
 
 | Role                | Email                    | Password     |
 | ------------------- | ------------------------ | ------------ |
-| **Admin**     | admin@safesphere.app     | admin123     |
-| **Responder** | responder@safesphere.app | responder123 |
-| **Reporter**  | reporter@safesphere.app  | reporter123  |
-| **Viewer**    | viewer@safesphere.app    | viewer123    |
+| **Admin**           | admin@safesphere.app     |  xxxxxxxx    |
+| **Responder**       | responder@safesphere.app |  xxxxxxxx    |
+| **Reporter**        | reporter@safesphere.app  |  xxxxxxxx    |
+| **Viewer**          | viewer@safesphere.app    |  xxxxxxxx    |
 
 ---
 
