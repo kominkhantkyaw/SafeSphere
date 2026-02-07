@@ -1,0 +1,304 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* SafeSphere High Fidelity Colour Palette */
+:root {
+  --safesphere-primary: #1d4ed8;
+  --safesphere-primary-light: #3b82f6;
+  --safesphere-primary-lighter: #60a5fa;
+  --safesphere-primary-dark: #1e40af;
+  --safesphere-login-outer: #1e40af;
+  --safesphere-accent: #0ea5e9;
+  --safesphere-surface: #f8fafc;
+  --safesphere-card: #ffffff;
+}
+
+/* Login/Welcome page - dark blue outer frame (always applied) */
+.login-page-outer {
+  background-color: #1e40af !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+
+
+body.login-page-active {
+  background-color: #1e40af !important;
+}
+
+@layer base {
+  body {
+    @apply font-sans transition-colors duration-300;
+    background-color: var(--safesphere-surface);
+  }
+}
+
+/* Responsive & Cross-Device */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pl-safe { padding-left: env(safe-area-inset-left); }
+  .pr-safe { padding-right: env(safe-area-inset-right); }
+}
+.safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px)); }
+.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+
+/* Custom Utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Leaflet Overrides - light background prevents dark flash before tiles load */
+.leaflet-container {
+  z-index: 0;
+  background: #e5e7eb !important;
+}
+.custom-div-icon, .user-loc-icon, .safety-icon, .editor-icon {
+  background: transparent;
+  border: none;
+}
+
+/* Theme Fonts */
+.font-inter { font-family: 'Inter', sans-serif; }
+.font-roboto { font-family: 'Roboto', sans-serif; }
+.font-serif { font-family: 'Playfair Display', serif; }
+
+/* Dark Mode Overrides */
+.theme-dark {
+  background-color: #111827;
+  color: #f9fafb;
+}
+.theme-dark .bg-white { background-color: #1f2937; border-color: #374151; color: #f9fafb; }
+.theme-dark .bg-gray-50 { background-color: #111827; }
+.theme-dark .bg-gray-100 { background-color: #374151; color: #e5e7eb; }
+.theme-dark .text-gray-500 { color: #9ca3af; }
+.theme-dark .text-gray-600 { color: #d1d5db; }
+.theme-dark .text-gray-700 { color: #e5e7eb; }
+.theme-dark .text-gray-900 { color: #f9fafb; }
+.theme-dark .border-gray-100 { border-color: #374151; }
+.theme-dark .border-gray-200 { border-color: #374151; }
+.theme-dark .border-gray-300 { border-color: #4b5563; }
+.theme-dark input, .theme-dark select, .theme-dark textarea {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: white;
+}
+
+/* Home Page - Prototype colours */
+.home-page-content {
+  background-color: #f8fcf8;
+}
+.theme-dark .home-page-content {
+  background-color: #111827;
+}
+
+/* Maps page: always light for clarity (Live Command Map, incident views) */
+.maps-page-container {
+  background-color: #f3f4f6 !important;
+}
+.theme-dark .maps-page-container {
+  background-color: #f3f4f6 !important;
+  color: #1f2937;
+}
+.theme-dark .maps-page-container .text-gray-500 { color: #6b7280; }
+.theme-dark .maps-page-container .text-gray-600 { color: #4b5563; }
+.theme-dark .maps-page-container .text-gray-700 { color: #374151; }
+.theme-dark .maps-page-container .text-gray-900 { color: #111827; }
+.theme-dark .maps-page-container .border-gray-200 { border-color: #e5e7eb; }
+.theme-dark .maps-page-container .border-gray-300 { border-color: #d1d5db; }
+.theme-dark .maps-page-container .bg-white { background-color: #ffffff !important; border-color: #e5e7eb; color: #1f2937; }
+.theme-dark .maps-page-container button.bg-white { background-color: #ffffff !important; color: #1f2937; }
+.theme-dark .maps-page-container .bg-gray-100 { background-color: #f3f4f6 !important; color: #374151; }
+.theme-dark .maps-page-container .bg-gray-50 { background-color: #f9fafb !important; }
+.theme-dark .maps-page-container input,
+.theme-dark .maps-page-container select,
+.theme-dark .maps-page-container textarea {
+  background-color: #ffffff;
+  border-color: #d1d5db;
+  color: #1f2937;
+}
+
+/* Animations */
+@keyframes scan {
+  0% { top: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.animate-scan {
+  background: linear-gradient(to bottom, transparent, rgba(34, 197, 94, 0.5));
+  box-shadow: 0 4px 4px rgba(34, 197, 94, 0.2);
+}
+
+/* Print Report - A4 format */
+.report-print-content {
+  display: none;
+}
+@page {
+  size: A4;
+  margin: 12mm;
+}
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  body .report-print-content,
+  body .report-print-content * {
+    visibility: visible !important;
+  }
+  .report-print-content {
+    display: flex !important;
+    flex-direction: column !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 186mm !important;
+    max-width: 186mm !important;
+    max-height: 273mm !important;
+    padding: 10mm !important;
+    margin: 0 !important;
+    background: white !important;
+    font-size: 10pt !important;
+    line-height: 1.35 !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+    gap: 6px !important;
+  }
+  .report-print-content .report-print-map {
+    flex-shrink: 0;
+  }
+  .report-print-content .report-print-map .report-print-map-inner {
+    width: 150mm !important;
+    max-width: 100% !important;
+    height: 112mm !important;
+    aspect-ratio: 4/3 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  .report-print-content .report-print-attachment {
+    width: 150mm !important;
+    max-width: 100% !important;
+    height: 112mm !important;
+    aspect-ratio: 4/3 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Fire Alarm Wave Animations */
+@keyframes fireWave {
+  0% {
+    width: 24px;
+    height: 24px;
+    margin-left: -12px;
+    margin-top: -12px;
+    opacity: 0.8;
+  }
+  100% {
+    width: 100px;
+    height: 100px;
+    margin-left: -50px;
+    margin-top: -50px;
+    opacity: 0;
+  }
+}
+
+@keyframes firePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+  }
+}
+
+@keyframes fireGlow {
+  0%, 100% {
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.9), 
+                0 0 40px rgba(239, 68, 68, 0.6), 
+                0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(239, 68, 68, 1), 
+                0 0 60px rgba(239, 68, 68, 0.8), 
+                0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Live Command Map: compact fireWave + active GPS-style pulse */
+@keyframes fireWaveSmall {
+  0% {
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-top: -5px;
+    opacity: 1;
+  }
+  100% {
+    width: 52px;
+    height: 52px;
+    margin-left: -26px;
+    margin-top: -26px;
+    opacity: 0;
+  }
+}
+
+/* GPS Incident Map style: actively pulsing ring - expands outward and fades */
+@keyframes gpsActivePulse {
+  0% {
+    transform: scale(0.3);
+    opacity: 1;
+    border-width: 3px;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+/* Fire/Incident alert: rings expand from tiny to bigger simultaneously (like earthquake/incident alert) */
+@keyframes fireAlertSimultaneous {
+  0% {
+    transform: scale(0.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Score Breakdown chart: line draw-in animation */
+@keyframes scoreLineDraw {
+  0% { stroke-dashoffset: 1000; }
+  100% { stroke-dashoffset: 0; }
+}
+.score-chart-line {
+  stroke-dasharray: 2 4;
+  animation: scoreLineDraw 0.8s ease-out forwards;
+}

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0">
+    <meta name="theme-color" content="#1d4ed8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <title>SafeSphere</title>
+    <script src="https://cdn.tailwindcss.com"></script> 
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        html, body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            transition: background-color 0.3s, color 0.3s;
+            min-height: 100vh;
+            min-height: 100dvh;
+            margin: 0;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        #root {
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+        body.login-page-active { background-color: #1e40af !important; }
+        /* Hide scrollbar for clean mobile UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .leaflet-container {
+            z-index: 0;
+        }
+        
+        /* Theme Classes */
+        .font-inter { font-family: 'Inter', sans-serif; }
+        .font-roboto { font-family: 'Roboto', sans-serif; }
+        .font-serif { font-family: 'Playfair Display', serif; }
+        
+        .theme-dark {
+            background-color: #111827;
+            color: #f9fafb;
+        }
+        .theme-dark .bg-white { background-color: #1f2937; border-color: #374151; color: #f9fafb; }
+        .theme-dark .bg-gray-50 { background-color: #111827; }
+        .theme-dark .bg-gray-100 { background-color: #374151; color: #e5e7eb; }
+        .theme-dark .text-gray-500 { color: #9ca3af; }
+        .theme-dark .text-gray-600 { color: #d1d5db; }
+        .theme-dark .text-gray-700 { color: #e5e7eb; }
+        .theme-dark .text-gray-900 { color: #f9fafb; }
+        .theme-dark .border-gray-100 { border-color: #374151; }
+        .theme-dark .border-gray-200 { border-color: #374151; }
+        .theme-dark .border-gray-300 { border-color: #4b5563; }
+        .theme-dark input, .theme-dark select, .theme-dark textarea {
+            background-color: #374151;
+            border-color: #4b5563;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

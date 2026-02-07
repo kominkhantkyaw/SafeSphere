@@ -1,0 +1,9 @@
+{
+  "name": "SafeSphere",
+  "short_name": "SafeSphere",
+  "description": "Disaster Preparedness and Emergency Response",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1d4ed8",
+  "background_color": "#f8fafc"
+}

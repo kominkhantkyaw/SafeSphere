@@ -1,0 +1,40 @@
+{
+  "name": "safesphere",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "analyze": "ANALYZE=true npm run build && node scripts/apply-analyzer-colours.mjs",
+    "analyse": "ANALYZE=true npm run build && node scripts/apply-analyzer-colours.mjs"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.87.1",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^0.554.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "@vitest/coverage-istanbul": "^4.0.18",
+    "@vitest/coverage-v8": "^4.0.18",
+    "happy-dom": "^20.4.0",
+    "jsdom": "^27.4.0",
+    "rollup-plugin-visualizer": "^6.0.5",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^4.0.18"
+  }
+}

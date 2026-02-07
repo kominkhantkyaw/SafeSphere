@@ -1,0 +1,59 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.vercel
+
+# Documentation and reports (keep locally)
+docs/
+*.pdf
+*.docx
+*.doc
+*.xlsx
+*.xls
+*.pptx
+*.ppt
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Database data files (schema .sql is committed)
+*.db
+*.sqlite
+*.sqlite3
+
+# API keys and environment variables
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+build/
+coverage/
+
+# Ignore metadata
+metadata.json
+stats.html
