@@ -122,18 +122,20 @@ const Chat: React.FC = () => {
 
     const simulateReply = useCallback((convId: number, afterId: number) => {
         const teamName = selectedChat?.name || 'Team';
-        const responses = [
-            'Thanks for your message. Our team will respond shortly.',
-            'We\'ve received your message. A responder will get back to you soon.',
-            'Thank you for reaching out. We\'re here to help.',
-            'Message received. Our team is looking into this.'
-        ];
-        const reply = responses[Math.floor(Math.random() * responses.length)];
+        const isAiChat = selectedChat?.isAi === true;
+        const content = isAiChat
+            ? 'The AI assistant couldn\'t generate a response right now. Please try again in a moment or check the browser console (F12) for details.'
+            : [
+                'Thanks for your message. Our team will respond shortly.',
+                'We\'ve received your message. A responder will get back to you soon.',
+                'Thank you for reaching out. We\'re here to help.',
+                'Message received. Our team is looking into this.'
+            ][Math.floor(Math.random() * 4)];
         setTimeout(() => {
             setMessagesByConversation(prev => {
                 const conv = prev[convId] || [];
                 const replyId = Math.max(0, ...conv.map(m => m.id), afterId) + 1;
-                return { ...prev, [convId]: [...conv, { id: replyId, sender: teamName, content: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
+                return { ...prev, [convId]: [...conv, { id: replyId, sender: teamName, content, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
             });
         }, 1200);
     }, [selectedChat]);
@@ -158,11 +160,22 @@ const Chat: React.FC = () => {
                         return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
                     });
                 } else {
-                    simulateReply(convId, afterId);
+                    // AI failed to respond – show AI-specific message (check console for [AI Chat] errors)
+                    const fallback = 'The AI assistant couldn\'t generate a response right now. Please check your connection, try again in a moment, or see the browser console (F12) for details.';
+                    setMessagesByConversation(prev => {
+                        const c = prev[convId] || [];
+                        const replyId = Math.max(0, ...c.map(m => m.id), afterId) + 1;
+                        return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: fallback, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
+                    });
                 }
             } catch {
                 setAiTyping(false);
-                simulateReply(convId, afterId);
+                const fallback = 'The AI assistant couldn\'t generate a response right now. Please try again or check the browser console (F12) for errors.';
+                setMessagesByConversation(prev => {
+                    const c = prev[convId] || [];
+                    const replyId = Math.max(0, ...c.map(m => m.id), afterId) + 1;
+                    return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: fallback, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
+                });
             }
         } else {
             simulateReply(convId, afterId);
