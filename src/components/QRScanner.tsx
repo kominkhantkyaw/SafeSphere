@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Icons } from './Icon';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -53,6 +53,20 @@ function parseScannedData(data: string): { type: 'rescue' | 'url' | 'resource' |
     return { type: 'generic', payload: trimmed };
 }
 
+/** Safely stop a running Html5Qrcode instance, awaiting completion. */
+async function safeStop(instance: Html5Qrcode | null): Promise<void> {
+    if (!instance) return;
+    try {
+        const state = instance.getState();
+        // States: NOT_STARTED = 1, SCANNING = 2, PAUSED = 3
+        if (state === 2 || state === 3) {
+            await instance.stop();
+        }
+    } catch {
+        // Already stopped or in a transitional state — ignore
+    }
+}
+
 const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
     const { t } = useLanguage();
     const [scanning, setScanning] = useState(false);
@@ -62,77 +76,127 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
     const [scanResultType, setScanResultType] = useState<'rescue' | 'url' | 'resource' | 'generic' | null>(null);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const html5QrRef = useRef<Html5Qrcode | null>(null);
+    const mountedRef = useRef(true);
+    const readerElRef = useRef<HTMLDivElement | null>(null);
 
-    const startCamera = async () => {
-        const element = document.getElementById(READER_ID);
+    // Track mounted state for safe async updates
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
+
+    const startCamera = useCallback(async () => {
+        // Wait for the DOM element — use the ref directly
+        const element = readerElRef.current || document.getElementById(READER_ID);
         if (!element) {
-            setCameraError('Scanner element not found');
-            setScanning(false);
+            if (mountedRef.current) {
+                setCameraError(t('scannerElementNotFound'));
+                setScanning(false);
+            }
             return;
         }
+
+        // Ensure any previous instance is fully stopped before creating a new one
+        await safeStop(html5QrRef.current);
+        html5QrRef.current = null;
+
+        if (!mountedRef.current) return;
+
         try {
             const html5Qr = new Html5Qrcode(READER_ID);
             html5QrRef.current = html5Qr;
-            await html5Qr.start(
-                { facingMode: 'environment' },
-                { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
-                (decodedText) => {
-                    html5Qr.stop().catch(() => {});
+
+            const scanConfig = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
+
+            const onSuccess = (decodedText: string) => {
+                safeStop(html5Qr).then(() => {
                     html5QrRef.current = null;
-                    setScanning(false);
-                    const result = parseScannedData(decodedText);
-                    setScannedData(decodedText);
-                    setScanResultType(result.type);
-                    if (result.type === 'rescue') {
-                        setRescueCenter(result.payload as RescueCenter);
-                    } else {
-                        setGenericContent(typeof result.payload === 'string' ? result.payload : decodedText);
-                    }
-                    onScan?.(decodedText);
-                },
-                () => {}
-            );
+                });
+                if (!mountedRef.current) return;
+                setScanning(false);
+                const result = parseScannedData(decodedText);
+                setScannedData(decodedText);
+                setScanResultType(result.type);
+                if (result.type === 'rescue') {
+                    setRescueCenter(result.payload as RescueCenter);
+                } else {
+                    setGenericContent(typeof result.payload === 'string' ? result.payload : decodedText);
+                }
+                onScan?.(decodedText);
+            };
+
+            // Try rear camera first (mobile), fall back to front camera (desktop/laptop)
+            try {
+                await html5Qr.start(
+                    { facingMode: { ideal: 'environment' } },
+                    scanConfig,
+                    onSuccess,
+                    () => {}
+                );
+            } catch {
+                // Rear camera failed — try front camera
+                try {
+                    await html5Qr.start(
+                        { facingMode: 'user' },
+                        scanConfig,
+                        onSuccess,
+                        () => {}
+                    );
+                } catch (innerErr) {
+                    throw innerErr; // Let the outer catch handle the final error
+                }
+            }
         } catch (err) {
+            if (!mountedRef.current) return;
             const msg = err instanceof Error ? err.message : String(err);
-            setCameraError(msg || 'Camera access failed. Use HTTPS or localhost.');
+            setCameraError(msg || t('cameraAccessFailed'));
             setScanning(false);
             html5QrRef.current = null;
         }
-    };
+    }, [onScan, t]);
 
+    // Open / close effect
     useEffect(() => {
         if (!isOpen) {
-            if (html5QrRef.current?.isScanning) {
-                html5QrRef.current.stop().catch(() => {});
-            }
-            html5QrRef.current = null;
+            safeStop(html5QrRef.current).then(() => {
+                html5QrRef.current = null;
+            });
             return;
         }
-        setCameraError(null);
-        setScanning(true);
-        setScannedData(null);
-        setRescueCenter(null);
-        setGenericContent(null);
-        setScanResultType(null);
-        const t = setTimeout(startCamera, 150);
-        return () => {
-            clearTimeout(t);
-            if (html5QrRef.current?.isScanning) {
-                html5QrRef.current.stop().catch(() => {});
-            }
-            html5QrRef.current = null;
-        };
-    }, [isOpen]);
 
-    const handleScanAgain = () => {
+        // Reset state when opening
+        setCameraError(null);
+        setScanning(true);
+        setScannedData(null);
+        setRescueCenter(null);
+        setGenericContent(null);
+        setScanResultType(null);
+
+        // Give React one frame to render the <div id={READER_ID}> before starting
+        const rafId = requestAnimationFrame(() => {
+            startCamera();
+        });
+
+        return () => {
+            cancelAnimationFrame(rafId);
+            safeStop(html5QrRef.current).then(() => {
+                html5QrRef.current = null;
+            });
+        };
+    }, [isOpen, startCamera]);
+
+    const handleScanAgain = useCallback(() => {
         setScannedData(null);
         setRescueCenter(null);
         setGenericContent(null);
         setScanResultType(null);
         setCameraError(null);
         setScanning(true);
-        setTimeout(startCamera, 150);
-    };
+        // One frame delay so the reader div is rendered before we access it
+        requestAnimationFrame(() => {
+            startCamera();
+        });
+    }, [startCamera]);
 
     if (!isOpen) return null;
 
@@ -164,13 +228,24 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                         {cameraError ? (
                             <div className="text-center py-8">
                                 <Icons.AlertTriangle size={48} className="text-amber-500 mx-auto mb-4" />
-                                <p className="text-gray-700 font-medium mb-2">Camera access failed</p>
+                                <p className="text-gray-700 font-medium mb-2">{t('cameraAccessFailed')}</p>
                                 <p className="text-sm text-gray-500 mb-4">{cameraError}</p>
-                                <p className="text-xs text-gray-400">Use HTTPS or localhost. Grant camera permission when prompted.</p>
+                                <p className="text-xs text-gray-400 mb-4">{t('cameraHttpsHint')}</p>
+                                <button
+                                    onClick={handleScanAgain}
+                                    className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 inline-flex items-center gap-2"
+                                >
+                                    <Icons.RefreshCw size={16} />
+                                    {t('tryAgain')}
+                                </button>
                             </div>
                         ) : scanning && !scannedData ? (
                             <div className="space-y-4">
-                                <div id={READER_ID} className="rounded-2xl overflow-hidden bg-black min-h-[250px]" />
+                                <div
+                                    id={READER_ID}
+                                    ref={readerElRef}
+                                    className="rounded-2xl overflow-hidden bg-black min-h-[250px]"
+                                />
                                 <p className="text-center text-sm text-gray-600">{t('positionQrInFrame')}</p>
                             </div>
                         ) : scannedData && (rescueCenter || genericContent !== null) ? (
@@ -242,7 +317,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                                             </button>
                                             <button
                                                 onClick={() => {
-                                                    navigator.clipboard.writeText(rescueCenter.phone);
+                                                    navigator.clipboard.writeText(rescueCenter.phone).catch(() => {});
                                                     alert(t('phoneNumberCopied'));
                                                 }}
                                                 className="py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
@@ -257,23 +332,28 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                                         <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                             <Icons.CheckCircle size={32} className="text-blue-600" />
                                         </div>
-                                        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">QR Code Scanned</h3>
+                                        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">{t('qrCodeScanned')}</h3>
                                         <div className="bg-gray-50 rounded-xl p-4 mb-4 font-mono text-sm text-gray-700 break-all">
                                             {genericContent}
                                         </div>
-                                        {scanResultType === 'url' && (
+                                        {scanResultType === 'url' && genericContent && (
                                             <a
-                                                href={genericContent!}
+                                                href={genericContent}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="block w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-center hover:bg-blue-700"
+                                                className="block w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-center hover:bg-blue-700 mb-3"
                                             >
-                                                Open URL
+                                                {t('openUrl')}
                                             </a>
+                                        )}
+                                        {scanResultType === 'resource' && (
+                                            <p className="text-sm text-green-700 bg-green-50 rounded-lg p-3 mb-3 text-center font-medium">
+                                                {t('resourceDetectedNavigating')}
+                                            </p>
                                         )}
                                         <button
                                             onClick={handleScanAgain}
-                                            className="w-full mt-3 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300"
+                                            className="w-full py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300"
                                         >
                                             {t('scanAgain')}
                                         </button>

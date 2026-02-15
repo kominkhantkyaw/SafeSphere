@@ -27,12 +27,17 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     // -- Form State --
     const [type, setType] = useState('Structural Fire');
     const [urgency, setUrgency] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Medium');
-    const [department, setDepartment] = useState('Maintenance');
+    const [department, setDepartment] = useState('Main Building');
     const [description, setDescription] = useState('');
     
     // Contact Info (Optional)
     const [contactPerson, setContactPerson] = useState('');
+    const [countryCode, setCountryCode] = useState('+43');
     const [contactPhone, setContactPhone] = useState('');
+    const [contactEmail, setContactEmail] = useState('');
+
+    /** Combined phone for display and submission, e.g. "+43 6601234567" */
+    const fullPhone = contactPhone ? `${countryCode} ${contactPhone}` : '';
 
     // Advanced
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -46,6 +51,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     // Location
     const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
     const [locating, setLocating] = useState(true);
+    const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
     const lastLocationRef = useRef<{lat: number, lng: number} | null>(null);
 
     // Media
@@ -65,7 +71,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
         if (initialData) {
             setType(initialData.type);
             setUrgency(initialData.urgency || 'Medium');
-            setDepartment(initialData.department || 'Maintenance');
+            setDepartment(initialData.department || 'Main Building');
             setDescription(initialData.description);
             setLocation({ lat: initialData.lat, lng: initialData.lng });
             setStructuralDamage(initialData.structuralDamage || 'None');
@@ -75,13 +81,27 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
             setDiscussed(initialData.situationDiscussed || false);
             setMitigation(initialData.mitigationPlan || '');
             setContactPerson(initialData.contactPerson || '');
-            setContactPhone(initialData.contactPhone || '');
+            // Parse country code from existing phone (e.g. "+43 6601234567")
+            if (initialData.contactPhone) {
+                const phoneMatch = initialData.contactPhone.match(/^(\+\d{1,4})\s*(.*)$/);
+                if (phoneMatch) {
+                    setCountryCode(phoneMatch[1]);
+                    setContactPhone(phoneMatch[2]);
+                } else {
+                    setContactPhone(initialData.contactPhone);
+                }
+            }
+            if (initialData.contactEmail) setContactEmail(initialData.contactEmail);
             if (initialData.image) setImage(initialData.image);
             if (initialData.video) setVideo(initialData.video);
             if (initialData.audio) setAudio(initialData.audio);
             if (initialData.structuralDamage || initialData.estRepairDays || initialData.estCost) setShowAdvanced(true);
         }
     }, [initialData]);
+
+    const stampSyncTime = useCallback(() => {
+        setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, []);
 
     const refreshLocation = useCallback((useCache = false) => {
         if (!('geolocation' in navigator)) return;
@@ -94,21 +114,23 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                 setLocation(coords);
                 lastLocationRef.current = coords;
+                stampSyncTime();
                 setLocating(false);
             },
             (err) => {
                 setLocating(false);
                 if (!useCache) refreshLocation(true);
-                else if (lastLocationRef.current) setLocation(lastLocationRef.current);
+                else if (lastLocationRef.current) { setLocation(lastLocationRef.current); stampSyncTime(); }
                 else if (type.toLowerCase().includes('flood')) {
                     const floodZone = getRandomFloodZoneYangon();
                     setLocation(floodZone);
                     lastLocationRef.current = floodZone;
+                    stampSyncTime();
                 }
             },
             opts
         );
-    }, [type]);
+    }, [type, stampSyncTime]);
 
     const handleGetLocation = () => refreshLocation();
 
@@ -129,6 +151,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                 setLocation(coords);
                 lastLocationRef.current = coords;
+                stampSyncTime();
                 setLocating(false);
             },
             (err) => {
@@ -139,6 +162,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                             const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                             setLocation(c);
                             lastLocationRef.current = c;
+                            stampSyncTime();
                         },
                         () => { if (lastLocationRef.current) setLocation(lastLocationRef.current); },
                         { enableHighAccuracy: false, timeout: 5000, maximumAge: 120000 }
@@ -148,7 +172,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
             opts
         );
         return () => navigator.geolocation.clearWatch(watchId);
-    }, [initialData]);
+    }, [initialData, stampSyncTime]);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -178,7 +202,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
             streamRef.current = stream;
             setShowCamera(true);
         } catch (err) {
-            alert('Camera access denied or not available.');
+            alert(t('cameraAccessDenied'));
         }
     };
 
@@ -196,7 +220,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
         const videoEl = videoRef.current;
         const stream = streamRef.current;
         if (!videoEl || !stream) {
-            alert('Camera not ready. Please wait a moment and try again.');
+            alert(t('cameraNotReady'));
             return;
         }
         const w = videoEl.videoWidth || 640;
@@ -209,7 +233,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
         try {
             ctx.drawImage(videoEl, 0, 0, w, h);
         } catch (err) {
-            alert('Could not capture frame. Please try again.');
+            alert(t('captureFrameFailed'));
             return;
         }
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
@@ -246,7 +270,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 videoRef.current.srcObject = stream;
             }
         } catch (err) {
-            alert('Camera access denied or not available.');
+            alert(t('cameraAccessDenied'));
         }
     };
 
@@ -286,25 +310,25 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 };
                 mediaRecorder.start();
                 setIsRecording(true);
-            } catch (err) { alert("Microphone access denied or not supported."); }
+            } catch (err) { alert(t('microphoneAccessDenied')); }
         }
     };
 
     const handleSubmit = async () => {
-        if (!location) { alert("Please include a location."); return; }
+        if (!location) { alert(t('pleaseIncludeLocation')); return; }
         setLoading(true);
         const newId = initialData?.id || Math.floor(Math.random() * 100000);
         const reportData: Partial<IncidentReport> = {
             id: newId, 
             type, urgency, department, description, structuralDamage, estRepairDays: repairDays, estCost: cost,
             repeatable, situationDiscussed: discussed, mitigationPlan: mitigation, lat: location.lat, lng: location.lng,
-            contactPerson, contactPhone,
+            contactPerson, contactPhone: fullPhone, contactEmail: contactEmail || undefined,
             timestamp: initialData?.timestamp || new Date().toLocaleTimeString(), image: image || undefined, video: video || undefined, audio: audio || undefined,
             reporterId: user?.id
         };
         const success = await submitReport(reportData);
         setLoading(false);
-        if (success) { setSubmittedId(newId); setStep('SUCCESS'); } else { alert("Failed to submit."); }
+        if (success) { setSubmittedId(newId); setStep('SUCCESS'); } else { alert(t('failedToSubmit')); }
     };
 
     const handlePrint = () => window.print();
@@ -313,7 +337,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
         const shareUrl = submittedId ? `${window.location.origin}/report/${submittedId}` : window.location.href;
         if (navigator.share) {
             try { await navigator.share({ title: `Incident #${submittedId}: ${type}`, text: description, url: shareUrl }); } catch (err) { console.log('Error sharing', err); }
-        } else { navigator.clipboard.writeText(shareUrl); alert("Report link copied to clipboard!"); }
+        } else { navigator.clipboard.writeText(shareUrl); alert(t('reportLinkCopied')); }
     };
 
     const renderHeader = (title: string, icon: React.ReactNode) => (
@@ -326,49 +350,50 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     if (step === 'REVIEW') {
         return (
             <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100 h-full overflow-y-auto">
-                {renderHeader("Review Report", <Icons.FileText className="text-blue-500" size={24} />)}
+                {renderHeader(t('reviewReport'), <Icons.FileText className="text-blue-500" size={24} />)}
                 <div className="space-y-4 mb-6">
                     <div className="bg-gray-50 p-4 rounded-xl space-y-2 text-sm">
-                        <div className="flex justify-between"><span className="text-gray-500">Type:</span> <span className="font-bold">{type}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-500">Urgency:</span> <span className={`font-bold ${urgency === 'Critical' ? 'text-red-600' : 'text-black'}`}>{urgency}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-500">Dept:</span> <span className="font-bold">{department}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-500">Location:</span> <span className="font-mono">{location?.lat.toFixed(5)}, {location?.lng.toFixed(5)}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500">{t('hazardType')}:</span> <span className="font-bold">{type}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500">{t('urgencyLabel')}:</span> <span className={`font-bold ${urgency === 'Critical' ? 'text-red-600' : 'text-black'}`}>{urgency}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500">{t('incidentLocation')}:</span> <span className="font-bold">{department}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-500">{t('gpsLabel')}:</span> <span className="font-mono">{location?.lat.toFixed(5)}, {location?.lng.toFixed(5)}</span></div>
                     </div>
                     {location && typeof window !== 'undefined' && window.L && (
                         <div className="rounded-xl overflow-hidden border border-gray-200">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Incident Location Map</p>
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">{t('incidentLocationMap')}</p>
                             <div className="w-full aspect-[4/3] min-h-[200px]">
                                 <IncidentMap reports={[{ id: 0, lat: location.lat, lng: location.lng, type, description, timestamp: new Date().toLocaleTimeString(), status: 'pending' }]} centerLat={location.lat} centerLng={location.lng} />
                             </div>
                         </div>
                     )}
                     
-                    {(contactPerson || contactPhone) && (
+                    {(contactPerson || fullPhone || contactEmail) && (
                         <div className="bg-blue-50 p-4 rounded-xl space-y-2 text-sm border border-blue-100">
-                             <h3 className="text-xs font-bold text-blue-600 uppercase mb-1">Point of Contact</h3>
-                             {contactPerson && <div className="flex justify-between"><span className="text-gray-500">Name:</span> <span className="font-bold">{contactPerson}</span></div>}
-                             {contactPhone && <div className="flex justify-between"><span className="text-gray-500">Phone:</span> <span className="font-bold">{contactPhone}</span></div>}
+                             <h3 className="text-xs font-bold text-blue-600 uppercase mb-1">{t('pointOfContact')}</h3>
+                             {contactPerson && <div className="flex justify-between"><span className="text-gray-500">{t('name')}:</span> <span className="font-bold">{contactPerson}</span></div>}
+                             {fullPhone && <div className="flex justify-between"><span className="text-gray-500">{t('phone')}:</span> <span className="font-bold">{fullPhone}</span></div>}
+                             {contactEmail && <div className="flex justify-between"><span className="text-gray-500">{t('emailLabel')}:</span> <span className="font-bold">{contactEmail}</span></div>}
                         </div>
                     )}
 
-                    <div><h3 className="text-xs font-bold text-gray-500 uppercase mb-1">Description</h3><p className="p-3 bg-gray-50 rounded-xl text-sm">{description}</p></div>
+                    <div><h3 className="text-xs font-bold text-gray-500 uppercase mb-1">{t('description')}</h3><p className="p-3 bg-gray-50 rounded-xl text-sm">{description}</p></div>
                     {(repairDays > 0 || cost > 0 || mitigation) && (
                         <div className="bg-gray-50 p-4 rounded-xl text-sm space-y-1">
-                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">Advanced</h3>
-                            {repairDays > 0 && <div>Est Repair: {repairDays} days</div>}
-                            {cost > 0 && <div>Est Cost: €{cost}</div>}
-                            {mitigation && <div>Plan: {mitigation}</div>}
+                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">{t('advancedLabel')}</h3>
+                            {repairDays > 0 && <div>{t('estRepairLabel')}: {repairDays} {t('daysUnit')}</div>}
+                            {cost > 0 && <div>{t('estCostPrefix')}: €{cost}</div>}
+                            {mitigation && <div>{t('planLabel')}: {mitigation}</div>}
                         </div>
                     )}
                     <div className="flex gap-2">
-                         {image && <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Image size={12}/> Image Attached</div>}
-                         {video && <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Video size={12}/> Video Attached</div>}
-                         {audio && <div className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Mic size={12}/> Audio Attached</div>}
+                         {image && <div className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Image size={12}/> {t('imageAttached')}</div>}
+                         {video && <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Video size={12}/> {t('videoAttached')}</div>}
+                         {audio && <div className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded flex items-center gap-1"><Icons.Mic size={12}/> {t('audioAttached')}</div>}
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <button onClick={() => setStep('EDIT')} className="flex-1 py-3 rounded-xl border border-gray-300 font-bold text-gray-600">Back</button>
-                    <button onClick={handleSubmit} disabled={loading} className="flex-1 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700">{loading ? 'Submitting...' : initialData ? 'Update Report' : 'Submit Now'}</button>
+                    <button onClick={() => setStep('EDIT')} className="flex-1 py-3 rounded-xl border border-gray-300 font-bold text-gray-600">{t('back')}</button>
+                    <button onClick={handleSubmit} disabled={loading} className="flex-1 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700">{loading ? t('submittingBtn') : initialData ? t('updateReport') : t('submitNow')}</button>
                 </div>
             </div>
         );
@@ -398,9 +423,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 `Date/Time: ${new Date().toLocaleString()}`,
                 '',
                 'INCIDENT DETAILS',
-                `Type: ${type}`,
+                `Hazard Type: ${type}`,
                 `Urgency: ${urgency}`,
-                `Department: ${department}`,
+                `Location of Incident: ${department}`,
                 `Description: ${description}`,
                 '',
                 'LOCATION (GPS)',
@@ -410,7 +435,8 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 '',
                 'CONTACT',
                 `Name: ${contactPerson || 'N/A'}`,
-                `Phone: ${contactPhone || 'N/A'}`,
+                `Phone: ${fullPhone || 'N/A'}`,
+                `Email: ${contactEmail || 'N/A'}`,
                 '',
                 'ADVANCED',
                 `Structural Damage: ${structuralDamage}`,
@@ -434,7 +460,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
             document.body.removeChild(element);
             URL.revokeObjectURL(element.href);
         };
-        const handleDelete = () => { if (window.confirm("Delete this report?")) onCancel(); };
+        const handleDelete = () => { if (window.confirm(t('deleteReportConfirm'))) onCancel(); };
 
         const getStaticMapTiles = (lat: number, lng: number, gridSize: 1 | 4 = 1) => {
             const zoom = gridSize === 4 ? 15 : 16;
@@ -476,9 +502,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
                     <tbody>
-                        <tr><td style={{ padding: '3px 0', color: '#6b7280', width: '28%', fontSize: 9 }}>Type</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{type}</td></tr>
+                        <tr><td style={{ padding: '3px 0', color: '#6b7280', width: '28%', fontSize: 9 }}>Hazard Type</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{type}</td></tr>
                         <tr><td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>Urgency</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{urgency}</td></tr>
-                        <tr><td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>Department</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{department}</td></tr>
+                        <tr><td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>Location</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{department}</td></tr>
                         <tr><td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>Location</td><td style={{ padding: '3px 0', fontFamily: 'monospace', fontSize: 8 }}>{location?.lat.toFixed(5)}, {location?.lng.toFixed(5)}</td></tr>
                     </tbody>
                 </table>
@@ -505,11 +531,12 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                         </div>
                     );
                 })()}
-                {(contactPerson || contactPhone) && (
+                {(contactPerson || fullPhone || contactEmail) && (
                     <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#eff6ff', borderRadius: 4, border: '1px solid #bfdbfe' }}>
                         <p style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>Point of Contact</p>
                         {contactPerson && <p style={{ margin: '0 0 2px', fontSize: 9 }}><strong>Name:</strong> {contactPerson}</p>}
-                        {contactPhone && <p style={{ margin: 0, fontSize: 9 }}><strong>Phone:</strong> {contactPhone}</p>}
+                        {fullPhone && <p style={{ margin: '0 0 2px', fontSize: 9 }}><strong>Phone:</strong> {fullPhone}</p>}
+                        {contactEmail && <p style={{ margin: 0, fontSize: 9 }}><strong>Email:</strong> {contactEmail}</p>}
                     </div>
                 )}
                 <div style={{ marginBottom: 8 }}>
@@ -542,74 +569,171 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
             </div>
         );
 
+        // Incident type icon & colour
+        const getIncidentVisuals = (incidentType: string) => {
+            const t = incidentType.toLowerCase();
+            if (t.includes('fire') || t.includes('explosion')) return { Icon: Icons.Flame, bg: 'bg-red-100', text: 'text-red-600', ring: 'ring-red-200' };
+            if (t.includes('flood') || t.includes('tsunami')) return { Icon: Icons.Droplets, bg: 'bg-blue-100', text: 'text-blue-600', ring: 'ring-blue-200' };
+            if (t.includes('earthquake')) return { Icon: Icons.Activity, bg: 'bg-orange-100', text: 'text-orange-600', ring: 'ring-orange-200' };
+            if (t.includes('storm') || t.includes('hurricane')) return { Icon: Icons.CloudRain, bg: 'bg-sky-100', text: 'text-sky-600', ring: 'ring-sky-200' };
+            if (t.includes('medical') || t.includes('injury')) return { Icon: Icons.Medical, bg: 'bg-pink-100', text: 'text-pink-600', ring: 'ring-pink-200' };
+            if (t.includes('gas') || t.includes('hazardous')) return { Icon: Icons.AlertTriangle, bg: 'bg-yellow-100', text: 'text-yellow-600', ring: 'ring-yellow-200' };
+            if (t.includes('power')) return { Icon: Icons.Zap, bg: 'bg-amber-100', text: 'text-amber-600', ring: 'ring-amber-200' };
+            if (t.includes('security') || t.includes('missing')) return { Icon: Icons.Shield, bg: 'bg-purple-100', text: 'text-purple-600', ring: 'ring-purple-200' };
+            return { Icon: Icons.AlertTriangle, bg: 'bg-gray-100', text: 'text-gray-600', ring: 'ring-gray-200' };
+        };
+
+        const urgencyStyles: Record<string, string> = {
+            'Critical': 'bg-red-600 text-white',
+            'High': 'bg-orange-500 text-white',
+            'Medium': 'bg-yellow-400 text-yellow-900',
+            'Low': 'bg-green-100 text-green-700',
+        };
+
+        const visuals = getIncidentVisuals(type);
+        const IncidentIcon = visuals.Icon;
+        const submittedAt = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
         return (
             <>
                 {createPortal(printContent, document.body)}
                 <div className="no-print bg-white rounded-2xl p-6 shadow-xl border border-gray-100 text-center animate-in zoom-in duration-300 h-full overflow-y-auto">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4"><Icons.Check size={32} strokeWidth={3} /></div>
-                <h2 className="text-xl font-bold mb-1">{initialData ? 'Your report has been successfully updated!' : 'Your report has been successfully submitted!'}</h2>
-                <p className="text-sm text-gray-500 mb-6">ID: #{submittedId} • Sent to {department}</p>
-                <div className="bg-white border-2 border-gray-100 p-4 rounded-xl inline-block mb-6 shadow-inner relative group">
-                    <img src={qrUrl} alt="QR Code" className="w-32 h-32 mix-blend-multiply" />
-                    <button onClick={handleDownloadQR} className="absolute -bottom-2 -right-2 w-8 h-8 bg-black text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform cursor-pointer" title="Download QR"><Icons.Download size={14} /></button>
-                    <div className="text-[10px] text-gray-400 mt-2 font-mono uppercase tracking-wider">Scan to View Case</div>
+
+                {/* Success header */}
+                <div className="relative mb-5">
+                    <div className={`w-16 h-16 ${visuals.bg} ${visuals.text} rounded-full flex items-center justify-center mx-auto ring-4 ${visuals.ring}`}>
+                        <IncidentIcon size={30} strokeWidth={2.5} />
+                    </div>
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-7 h-7 bg-green-500 text-white rounded-full flex items-center justify-center ring-2 ring-white shadow">
+                        <Icons.Check size={16} strokeWidth={3} />
+                    </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3 mb-6">
-                    <button onClick={() => setShowViewModal(true)} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><Icons.Info size={18} /></div><span className="text-xs font-medium">View Report</span></button>
-                    <button onClick={handlePrint} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center"><Icons.Printer size={18} /></div><span className="text-xs font-medium">Print</span></button>
-                    <button onClick={handleDownloadReport} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center"><Icons.Download size={18} /></div><span className="text-xs font-medium">Download</span></button>
-                    <button onClick={handleShare} className="col-span-3 flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center"><Icons.Share size={18} /></div><span className="text-xs font-medium">Share</span></button>
+                <h2 className="text-xl font-bold mb-1">{initialData ? t('reportUpdatedSuccess') : t('reportSubmittedSuccess')}</h2>
+                <p className="text-sm text-gray-500 mb-4">{t('confirmationIdPrefix')} <span className="font-mono font-bold text-gray-700">#{submittedId}</span></p>
+
+                {/* Confirmation summary card */}
+                <div className="text-left bg-gray-50 rounded-xl p-4 mb-5 border border-gray-100 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <IncidentIcon size={16} className={visuals.text} />
+                            <span className="text-sm font-bold text-gray-800">{type}</span>
+                        </div>
+                        <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${urgencyStyles[urgency] || 'bg-gray-200 text-gray-600'}`}>{urgency}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center gap-1.5 text-gray-500">
+                            <Icons.MapPin size={12} className="shrink-0" />
+                            <span className="truncate">{department}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-gray-500">
+                            <Icons.Clock size={12} className="shrink-0" />
+                            <span className="truncate">{submittedAt}</span>
+                        </div>
+                        {location && (
+                            <div className="flex items-center gap-1.5 text-gray-400 col-span-2 font-mono text-[11px]">
+                                <Icons.Navigation size={12} className="shrink-0" />
+                                <span>{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>
+                            </div>
+                        )}
+                    </div>
+                    {description && (
+                        <p className="text-xs text-gray-500 line-clamp-2 border-t border-gray-200 pt-2">{description}</p>
+                    )}
+                    <div className="flex gap-1.5 flex-wrap">
+                        {image && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">{t('imageAttached')}</span>}
+                        {video && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">{t('videoAttached')}</span>}
+                        {audio && <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">{t('audioAttached')}</span>}
+                    </div>
+                </div>
+
+                {/* What happens next */}
+                <div className="text-left bg-blue-50/60 rounded-xl p-4 mb-5 border border-blue-100">
+                    <h3 className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                        <Icons.Info size={13} />
+                        {t('whatHappensNext')}
+                    </h3>
+                    <div className="space-y-2.5">
+                        <div className="flex items-start gap-2.5">
+                            <div className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0 mt-0.5"><Icons.Check size={12} strokeWidth={3} /></div>
+                            <p className="text-xs text-gray-700"><span className="font-bold">{t('nextStep1Title')}</span> — {t('nextStep1Desc')}</p>
+                        </div>
+                        <div className="flex items-start gap-2.5">
+                            <div className="w-5 h-5 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold">2</div>
+                            <p className="text-xs text-gray-700"><span className="font-bold">{t('nextStep2Title')}</span> — {t('nextStep2Desc')}</p>
+                        </div>
+                        <div className="flex items-start gap-2.5">
+                            <div className="w-5 h-5 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold">3</div>
+                            <p className="text-xs text-gray-700"><span className="font-bold">{t('nextStep3Title')}</span> — {t('nextStep3Desc')}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* QR Code */}
+                <div className="bg-white border-2 border-gray-100 p-4 rounded-xl inline-block mb-5 shadow-inner relative group">
+                    <img src={qrUrl} alt="QR Code" className="w-28 h-28 mix-blend-multiply" />
+                    <button onClick={handleDownloadQR} className="absolute -bottom-2 -right-2 w-9 h-9 bg-black text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform cursor-pointer" title={t('download')}><Icons.Download size={14} /></button>
+                    <div className="text-[10px] text-gray-400 mt-2 font-mono uppercase tracking-wider">{t('scanToViewCase')}</div>
+                </div>
+
+                {/* Actions */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                    <button onClick={() => setShowViewModal(true)} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><Icons.Info size={18} /></div><span className="text-xs font-medium">{t('viewReport')}</span></button>
+                    <button onClick={handlePrint} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center"><Icons.Printer size={18} /></div><span className="text-xs font-medium">{t('print')}</span></button>
+                    <button onClick={handleDownloadReport} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center"><Icons.Download size={18} /></div><span className="text-xs font-medium">{t('download')}</span></button>
+                    <button onClick={handleShare} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center"><Icons.Share size={18} /></div><span className="text-xs font-medium">{t('share')}</span></button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 border-t pt-4">
-                    <button onClick={() => { setStep('EDIT'); }} className="flex items-center justify-center gap-2 py-2 text-sm font-bold text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg"><Icons.Edit size={16} /> Edit Report</button>
-                    <button onClick={handleDelete} className="flex items-center justify-center gap-2 py-2 text-sm font-bold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"><Icons.Trash size={16} /> Delete</button>
+                    <button onClick={() => { setStep('EDIT'); }} className="flex items-center justify-center gap-2 py-2.5 text-sm font-bold text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg min-h-[44px]"><Icons.Edit size={16} /> {t('editReport')}</button>
+                    <button onClick={handleDelete} className="flex items-center justify-center gap-2 py-2.5 text-sm font-bold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg min-h-[44px]"><Icons.Trash size={16} /> {t('delete')}</button>
                 </div>
-                <button onClick={onSuccess} className="mt-4 w-full py-3 rounded-xl border-2 border-gray-100 font-bold text-gray-600 hover:bg-gray-50 hover:border-gray-200 transition-colors">Close</button>
+                <button onClick={onSuccess} className="mt-4 w-full py-3 rounded-xl border-2 border-gray-100 font-bold text-gray-600 hover:bg-gray-50 hover:border-gray-200 transition-colors min-h-[44px]">{t('close')}</button>
                 </div>
 
                 {showViewModal && (
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50">
                         <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[85vh] flex flex-col">
                             <div className="p-4 border-b flex justify-between items-center">
-                                <h3 className="font-bold text-lg">Incident Report #{submittedId}</h3>
-                                <button onClick={() => setShowViewModal(false)} className="p-2 hover:bg-gray-100 rounded-full"><Icons.X size={20} /></button>
+                                <h3 className="font-bold text-lg">{t('incidentReportTitle')} #{submittedId}</h3>
+                                <button onClick={() => setShowViewModal(false)} className="p-2 hover:bg-gray-100 rounded-full min-w-[44px] min-h-[44px] flex items-center justify-center"><Icons.X size={20} /></button>
                             </div>
                             <div className="p-4 overflow-y-auto flex-1 space-y-4 text-sm">
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div><span className="text-gray-500">Type:</span> <span className="font-semibold">{type}</span></div>
-                                    <div><span className="text-gray-500">Urgency:</span> <span className={`font-semibold ${urgency === 'Critical' ? 'text-red-600' : ''}`}>{urgency}</span></div>
-                                    <div><span className="text-gray-500">Department:</span> <span className="font-semibold">{department}</span></div>
-                                    <div><span className="text-gray-500">Status:</span> <span className="font-semibold text-green-600">Submitted</span></div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div><span className="text-gray-500">{t('hazardType')}:</span> <span className="font-semibold">{type}</span></div>
+                                    <div><span className="text-gray-500">{t('urgencyLabel')}:</span> <span className={`font-semibold ${urgency === 'Critical' ? 'text-red-600' : ''}`}>{urgency}</span></div>
+                                    <div><span className="text-gray-500">{t('incidentLocation')}:</span> <span className="font-semibold">{department}</span></div>
+                                    <div><span className="text-gray-500">{t('status')}:</span> <span className="font-semibold text-green-600">{t('submittedStatus')}</span></div>
                                 </div>
                                 <div>
-                                    <span className="text-gray-500 block text-xs uppercase font-bold mb-1">Description</span>
+                                    <span className="text-gray-500 block text-xs uppercase font-bold mb-1">{t('description')}</span>
                                     <p className="text-gray-800">{description}</p>
                                 </div>
                                 <div>
-                                    <span className="text-gray-500 block text-xs uppercase font-bold mb-1">Location (GPS)</span>
+                                    <span className="text-gray-500 block text-xs uppercase font-bold mb-1">{t('locationGps')}</span>
                                     <p className="font-mono text-xs">{location?.lat?.toFixed(6)}, {location?.lng?.toFixed(6)}</p>
                                     <a href={`https://www.google.com/maps?q=${location?.lat},${location?.lng}`} target="_blank" rel="noreferrer" className="text-blue-600 text-xs mt-1 inline-flex items-center gap-1">View on map <Icons.ChevronRight size={12} /></a>
                                 </div>
-                                {(contactPerson || contactPhone) && (
+                                {(contactPerson || fullPhone || contactEmail) && (
                                     <div>
-                                        <span className="text-gray-500 block text-xs uppercase font-bold mb-1">Contact</span>
-                                        <p>{contactPerson} {contactPhone}</p>
+                                        <span className="text-gray-500 block text-xs uppercase font-bold mb-1">{t('contactLabel')}</span>
+                                        {contactPerson && <p className="font-semibold">{contactPerson}</p>}
+                                        {fullPhone && <p className="text-gray-700">{fullPhone}</p>}
+                                        {contactEmail && <p className="text-blue-600">{contactEmail}</p>}
                                     </div>
                                 )}
                                 {(repairDays > 0 || cost > 0 || mitigation) && (
                                     <div>
-                                        <span className="text-gray-500 block text-xs uppercase font-bold mb-1">Advanced</span>
+                                        <span className="text-gray-500 block text-xs uppercase font-bold mb-1">{t('advancedLabel')}</span>
                                         <p>{[repairDays > 0 && `${repairDays} days repair`, cost > 0 && `€${cost}`, mitigation].filter(Boolean).join(' • ')}</p>
                                     </div>
                                 )}
                                 <div>
-                                    <span className="text-gray-500 block text-xs uppercase font-bold mb-1">Attachments</span>
-                                    <p className="flex gap-2 flex-wrap">{image && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Image</span>}{video && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">Video</span>}{audio && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">Audio</span>}{!image && !video && !audio && <span className="text-gray-400">None</span>}</p>
+                                    <span className="text-gray-500 block text-xs uppercase font-bold mb-1">{t('attachmentsLabel')}</span>
+                                    <p className="flex gap-2 flex-wrap">{image && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{t('imageAttached')}</span>}{video && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{t('videoAttached')}</span>}{audio && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">{t('audioAttached')}</span>}{!image && !video && !audio && <span className="text-gray-400">{t('noneLabel')}</span>}</p>
                                 </div>
                             </div>
                             <div className="p-4 border-t flex gap-2">
-                                <button onClick={handlePrint} className="flex-1 py-2 rounded-xl bg-gray-100 font-semibold text-gray-700 flex items-center justify-center gap-2"><Icons.Printer size={16} /> Print</button>
-                                <button onClick={handleDownloadReport} className="flex-1 py-2 rounded-xl bg-black text-white font-semibold flex items-center justify-center gap-2"><Icons.Download size={16} /> Download</button>
+                                <button onClick={handlePrint} className="flex-1 py-2.5 rounded-xl bg-gray-100 font-semibold text-gray-700 flex items-center justify-center gap-2 min-h-[44px]"><Icons.Printer size={16} /> {t('print')}</button>
+                                <button onClick={handleDownloadReport} className="flex-1 py-2.5 rounded-xl bg-black text-white font-semibold flex items-center justify-center gap-2 min-h-[44px]"><Icons.Download size={16} /> {t('download')}</button>
                             </div>
                         </div>
                     </div>
@@ -624,44 +748,224 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
             <form onSubmit={(e) => {
                 e.preventDefault();
                 if (!location) {
-                    alert('Please confirm your location first. Tap "Use GPS" or wait for GPS to lock.');
+                    alert(t('locationConfirmRequired'));
                     return;
                 }
                 setStep('REVIEW');
             }} className="space-y-4 pb-6">
-                <div className="grid grid-cols-2 gap-3">
-                    <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Hazard Type</label><select value={type} onChange={(e) => setType(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white"><option>Structural Fire</option><option>Flash Flood</option><option>Medical Emergency</option><option>Power Outage</option><option>Hazardous Spill</option><option>Other</option></select></div>
-                    <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Department</label><select value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white"><option>Maintenance</option><option>IT</option><option>Operations</option><option>Security</option><option>HR</option></select></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('hazardType')}</label>
+                        <select value={type} onChange={(e) => setType(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white">
+                            <option value="Structural Fire">{t('structuralFire')}</option>
+                            <option value="Flash Flood">{t('flashFlood')}</option>
+                            <option value="Earthquake">{t('earthquake')}</option>
+                            <option value="Tsunami">{t('tsunami')}</option>
+                            <option value="Volcano">{t('volcano')}</option>
+                            <option value="Hurricane">{t('hurricane')}</option>
+                            <option value="Storm">{t('storm')}</option>
+                            <option value="Gas Leak">{t('gasLeak')}</option>
+                            <option value="Explosion">{t('explosion')}</option>
+                            <option value="Medical Emergency">{t('medicalEmergency')}</option>
+                            <option value="Injury">{t('injury')}</option>
+                            <option value="Missing Person">{t('missingPerson')}</option>
+                            <option value="Security Threat">{t('securityThreat')}</option>
+                            <option value="Power Outage">{t('powerOutage')}</option>
+                            <option value="Hazardous Spill">{t('hazardousSpill')}</option>
+                            <option value="Other">{t('other')}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('incidentLocation')}</label>
+                        <select value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white">
+                            <option value="Main Building">{t('mainBuilding')}</option>
+                            <option value="Office">{t('office')}</option>
+                            <option value="Company Compound">{t('companyCompound')}</option>
+                            <option value="Warehouse">{t('warehouse')}</option>
+                            <option value="Workshop">{t('workshop')}</option>
+                            <option value="Parking Lot">{t('parkingLot')}</option>
+                            <option value="Factory">{t('factory')}</option>
+                            <option value="Construction Site">{t('constructionSite')}</option>
+                            <option value="School">{t('school')}</option>
+                            <option value="City Centre">{t('cityCentre')}</option>
+                            <option value="Highway">{t('highway')}</option>
+                            <option value="Airport">{t('airport')}</option>
+                            <option value="Urban Area">{t('urbanArea')}</option>
+                            <option value="Rural Area">{t('ruralArea')}</option>
+                            <option value="Other">{t('other')}</option>
+                        </select>
+                    </div>
                 </div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">Urgency</label><div className="flex bg-gray-100 p-1 rounded-xl">{['Low', 'Medium', 'High', 'Critical'].map((u) => (<button key={u} type="button" onClick={() => setUrgency(u as any)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${urgency === u ? 'bg-white shadow text-black' : 'text-gray-500'}`}>{u}</button>))}</div></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label><textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the situation..." className="w-full p-3 rounded-xl border border-gray-300 text-sm min-h-20 resize-y" rows={4} required /></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('urgencyLabel')}</label><div className="flex bg-gray-100 p-1 rounded-xl">{['Low', 'Medium', 'High', 'Critical'].map((u) => (<button key={u} type="button" onClick={() => setUrgency(u as any)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${urgency === u ? 'bg-white shadow text-black' : 'text-gray-500'}`}>{u}</button>))}</div></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('description')}</label><textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('describeSituation')} className="w-full p-3 rounded-xl border border-gray-300 text-sm min-h-20 resize-y" rows={4} required /></div>
                 
                 {/* Optional Contact Fields */}
                 <div className="p-4 bg-gray-50 rounded-xl space-y-3">
-                    <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><Icons.User size={12}/> Contact Info (Optional)</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <input type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-200 text-sm" placeholder="Your Name" />
+                    <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><Icons.User size={12}/> {t('contactInfoOptional')}</h3>
+                    {/* Name */}
+                    <div>
+                        <input type="text" value={contactPerson} onChange={e => setContactPerson(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-200 text-sm bg-white" placeholder={t('yourName')} />
+                    </div>
+                    {/* Phone with country code */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t('phoneNumber')}</label>
+                        <div className="flex gap-0 rounded-lg border border-gray-200 bg-white overflow-hidden focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20 transition-colors">
+                            <select
+                                value={countryCode}
+                                onChange={e => setCountryCode(e.target.value)}
+                                className="shrink-0 pl-2.5 pr-1 py-2.5 text-sm bg-gray-50 border-r border-gray-200 text-gray-700 font-medium outline-none cursor-pointer appearance-none"
+                                title={t('countryCodeLabel')}
+                                style={{ backgroundImage: 'none' }}
+                            >
+                                <option value="+43">🇦🇹 +43</option>
+                                <option value="+95">🇲🇲 +95</option>
+                                <option value="+49">🇩🇪 +49</option>
+                                <option value="+44">🇬🇧 +44</option>
+                                <option value="+1">🇺🇸 +1</option>
+                                <option value="+33">🇫🇷 +33</option>
+                                <option value="+39">🇮🇹 +39</option>
+                                <option value="+41">🇨🇭 +41</option>
+                                <option value="+34">🇪🇸 +34</option>
+                                <option value="+31">🇳🇱 +31</option>
+                                <option value="+46">🇸🇪 +46</option>
+                                <option value="+47">🇳🇴 +47</option>
+                                <option value="+48">🇵🇱 +48</option>
+                                <option value="+81">🇯🇵 +81</option>
+                                <option value="+82">🇰🇷 +82</option>
+                                <option value="+86">🇨🇳 +86</option>
+                                <option value="+91">🇮🇳 +91</option>
+                                <option value="+61">🇦🇺 +61</option>
+                                <option value="+65">🇸🇬 +65</option>
+                                <option value="+66">🇹🇭 +66</option>
+                                <option value="+60">🇲🇾 +60</option>
+                                <option value="+63">🇵🇭 +63</option>
+                                <option value="+84">🇻🇳 +84</option>
+                                <option value="+62">🇮🇩 +62</option>
+                                <option value="+7">🇷🇺 +7</option>
+                                <option value="+90">🇹🇷 +90</option>
+                                <option value="+971">🇦🇪 +971</option>
+                                <option value="+966">🇸🇦 +966</option>
+                                <option value="+20">🇪🇬 +20</option>
+                                <option value="+27">🇿🇦 +27</option>
+                                <option value="+55">🇧🇷 +55</option>
+                                <option value="+52">🇲🇽 +52</option>
+                            </select>
+                            <input
+                                type="tel"
+                                value={contactPhone}
+                                onChange={e => setContactPhone(e.target.value)}
+                                className="flex-1 min-w-0 px-3 py-2.5 text-sm outline-none bg-transparent"
+                                placeholder="660 123 4567"
+                            />
                         </div>
-                        <div>
-                            <input type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} className="w-full p-2.5 rounded-lg border border-gray-200 text-sm" placeholder="Phone Number" />
+                    </div>
+                    {/* Email */}
+                    <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{t('emailLabel')}</label>
+                        <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/20 transition-colors">
+                            <div className="pl-2.5 pr-1.5 text-gray-400">
+                                <Icons.Mail size={16} />
+                            </div>
+                            <input
+                                type="email"
+                                value={contactEmail}
+                                onChange={e => setContactEmail(e.target.value)}
+                                className="flex-1 min-w-0 px-2 py-2.5 text-sm outline-none bg-transparent"
+                                placeholder={t('emailPlaceholder')}
+                            />
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3"><input type="checkbox" id="repeatable" checked={repeatable} onChange={(e) => setRepeatable(e.target.checked)} className="w-5 h-5 rounded border-gray-300 text-black focus:ring-black"/><label htmlFor="repeatable" className="text-sm font-medium text-gray-700">This is a Repeatable Incident</label></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Location</label><button type="button" onClick={handleGetLocation} className={`w-full p-3 rounded-xl border border-dashed flex items-center justify-between transition-colors ${location ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}><div className="flex items-center gap-2">{locating ? <span className="animate-pulse">…</span> : location ? <Icons.Check size={16} /> : <Icons.MapPin size={16} />}<span className="text-sm font-medium">{locating ? 'Syncing…' : location ? 'Live' : 'Waiting for GPS…'}</span></div>{location && <span className="text-xs font-mono">{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>}</button>
-                {locating && !location && <p className="text-xs text-gray-500 mt-1">Auto-syncing your location. Tap above to refresh.</p>}
-                {type.toLowerCase().includes('flood') && (
-                    <p className="text-xs text-blue-600 mt-2 flex items-center gap-1.5 bg-blue-50 p-2 rounded-lg border border-blue-100">
-                        <Icons.Info size={14} className="shrink-0" />
-                        {t('floodPlacementHint')}
-                    </p>
-                )}
+                <div className="flex items-center gap-3"><input type="checkbox" id="repeatable" checked={repeatable} onChange={(e) => setRepeatable(e.target.checked)} className="w-5 h-5 rounded border-gray-300 text-black focus:ring-black"/><label htmlFor="repeatable" className="text-sm font-medium text-gray-700">{t('repeatableIncident')}</label></div>
+                {/* GPS Location Card */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('gpsLocationLabel')}</label>
+                    <div className={`rounded-xl border-2 p-4 transition-all duration-300 ${location ? 'border-green-200 bg-gradient-to-br from-green-50/80 to-emerald-50/40' : locating ? 'border-blue-200 bg-gradient-to-br from-blue-50/60 to-sky-50/30' : 'border-gray-200 bg-gray-50'}`}>
+                        {/* Status Row */}
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                {location ? (
+                                    <span className="relative flex h-2.5 w-2.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                                    </span>
+                                ) : locating ? (
+                                    <span className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
+                                ) : (
+                                    <span className="w-2.5 h-2.5 rounded-full bg-gray-300"></span>
+                                )}
+                                <span className={`text-sm font-bold ${location ? 'text-green-700' : locating ? 'text-blue-600' : 'text-gray-500'}`}>
+                                    {locating ? t('syncingLocation') : location ? t('gpsLiveConnected') : t('waitingForGps')}
+                                </span>
+                            </div>
+                            {lastSyncTime && location && (
+                                <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
+                                    <Icons.Clock size={10} />
+                                    {lastSyncTime}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Coordinates Display */}
+                        {location && (
+                            <div className="bg-white/80 backdrop-blur-sm rounded-lg p-3 mb-3 border border-green-100/80">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <Icons.MapPin size={12} className="text-green-600" />
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t('coordinatesLabel')}</span>
+                                </div>
+                                <p className="font-mono text-sm text-gray-800 tracking-wide">
+                                    {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Sync GPS Live Button */}
+                        <button
+                            type="button"
+                            onClick={handleGetLocation}
+                            disabled={locating}
+                            className={`w-full py-2.5 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                                locating
+                                    ? 'bg-blue-100 text-blue-400 cursor-wait'
+                                    : location
+                                        ? 'bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow-md'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+                            }`}
+                        >
+                            {locating ? (
+                                <>
+                                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                                    {t('syncingGps')}
+                                </>
+                            ) : (
+                                <>
+                                    <Icons.RefreshCw size={15} />
+                                    {location ? t('updateGpsLive') : t('syncGpsLive')}
+                                </>
+                            )}
+                        </button>
+
+                        {/* Helper text */}
+                        {!location && !locating && (
+                            <p className="text-xs text-gray-400 mt-2 text-center">{t('tapToSyncGps')}</p>
+                        )}
+                        {locating && !location && (
+                            <p className="text-xs text-blue-500 mt-2 text-center animate-pulse">{t('acquiringGpsSignal')}</p>
+                        )}
+                    </div>
+
+                    {/* Flood zone hint */}
+                    {type.toLowerCase().includes('flood') && (
+                        <p className="text-xs text-blue-600 mt-2 flex items-center gap-1.5 bg-blue-50 p-2 rounded-lg border border-blue-100">
+                            <Icons.Info size={14} className="shrink-0" />
+                            {t('floodPlacementHint')}
+                        </p>
+                    )}
                 </div>
                 {typeof window !== 'undefined' && window.L && (
                     <div className="rounded-xl overflow-hidden border border-gray-200">
-                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Incident Location Map <span className="text-green-600 font-normal">(GPS active)</span></p>
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">{t('incidentLocationMap')} <span className="text-green-600 font-normal">({t('gpsActive')})</span></p>
                         <div className="w-full aspect-[4/3] min-h-[200px]">
                             <IncidentMap
                                 reports={location ? [{ id: 0, lat: location.lat, lng: location.lng, type, description: '', timestamp: new Date().toLocaleTimeString(), status: 'pending' }] : []}
@@ -674,18 +978,18 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                     </div>
                 )}
                 <div className="border-t pt-3">
-                    <button type="button" onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-2 text-sm font-bold text-blue-600"><Icons.ChevronRight size={16} className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} /> Advanced Details</button>
+                    <button type="button" onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-2 text-sm font-bold text-blue-600"><Icons.ChevronRight size={16} className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} /> {t('advancedDetails')}</button>
                     {showAdvanced && (
                         <div className="mt-3 space-y-3 animate-in slide-in-from-top-2">
-                            <div className="grid grid-cols-2 gap-3"><div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Structural Damage</label><select value={structuralDamage} onChange={(e) => setStructuralDamage(e.target.value)} className="w-full p-2 rounded-lg border text-sm"><option>None</option><option>Minor</option><option>Major</option><option>Total Loss</option></select></div><div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Est. Repair (Days)</label><input type="number" value={repairDays} onChange={(e) => setRepairDays(Number(e.target.value))} className="w-full p-2 rounded-lg border text-sm"/></div></div>
-                            <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Est. Cost (€)</label><input type="number" value={cost} onChange={(e) => setCost(Number(e.target.value))} className="w-full p-2 rounded-lg border text-sm"/></div>
-                            <div className="flex flex-col gap-2"><label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={discussed} onChange={(e) => setDiscussed(e.target.checked)} className="rounded text-blue-600"/> Situation Discussed</label></div>
-                            <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Follow-up / Mitigation</label><textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder="Required actions..." className="w-full p-2 rounded-lg border text-sm h-16"/></div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('structuralDamageLabel')}</label><select value={structuralDamage} onChange={(e) => setStructuralDamage(e.target.value)} className="w-full p-2.5 rounded-lg border text-sm"><option>None</option><option>Minor</option><option>Major</option><option>Total Loss</option></select></div><div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('estRepairDays')}</label><input type="number" value={repairDays} onChange={(e) => setRepairDays(Number(e.target.value))} className="w-full p-2.5 rounded-lg border text-sm"/></div></div>
+                            <div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('estCostLabel')}</label><input type="number" value={cost} onChange={(e) => setCost(Number(e.target.value))} className="w-full p-2.5 rounded-lg border text-sm"/></div>
+                            <div className="flex flex-col gap-2"><label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={discussed} onChange={(e) => setDiscussed(e.target.checked)} className="rounded text-blue-600"/> {t('situationDiscussed')}</label></div>
+                            <div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('followUpMitigation')}</label><textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder={t('requiredActionsPlaceholder')} className="w-full p-2.5 rounded-lg border text-sm h-16"/></div>
                         </div>
                     )}
                 </div>
                 <div className="border-t pt-3">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Evidence & Media</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('evidenceMedia')}</label>
                     <div className="flex gap-2">
                         <div className="relative"><input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="img-upload" /><label htmlFor="img-upload" title="Upload image" className={`w-14 h-14 rounded-xl border flex items-center justify-center cursor-pointer ${image ? 'bg-green-100 border-green-500 text-green-600' : 'bg-gray-50 border-gray-200 text-gray-500'}`}><Icons.Image size={20} /></label></div>
                         <button type="button" onClick={openCamera} title="Take photo" className={`w-14 h-14 rounded-xl border flex items-center justify-center cursor-pointer ${image ? 'bg-blue-100 border-blue-500 text-blue-600' : 'bg-gray-50 border-gray-200 text-gray-500'}`}><Icons.Video size={20} /></button>
@@ -747,19 +1051,19 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                                 {capturedPhoto ? (
                                     <div className="flex gap-4">
                                         <button type="button" onClick={retakePhoto} className="flex-1 py-4 bg-gray-600 hover:bg-gray-500 text-white rounded-xl font-bold text-lg shadow-lg active:scale-[0.98]">
-                                            Retake
+                                            {t('retakeBtn')}
                                         </button>
                                         <button type="button" onClick={savePhoto} className="flex-1 py-4 bg-green-600 hover:bg-green-500 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]">
-                                            <Icons.Check size={24} aria-hidden /> Save Photo
+                                            <Icons.Check size={24} aria-hidden /> {t('savePhotoBtn')}
                                         </button>
                                     </div>
                                 ) : (
                                     <div className="flex gap-4">
                                         <button type="button" onClick={closeCamera} className="flex-1 py-4 bg-gray-600 hover:bg-gray-500 text-white rounded-xl font-bold text-lg shadow-lg active:scale-[0.98]">
-                                            Cancel
+                                            {t('cancel')}
                                         </button>
                                         <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); takePhoto(); }} disabled={!cameraReady} className={`flex-1 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] ${cameraReady ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-500 text-gray-300 cursor-not-allowed'}`}>
-                                            <Icons.Camera size={24} aria-hidden /> {cameraReady ? 'Take Photo' : 'Loading...'}
+                                            <Icons.Camera size={24} aria-hidden /> {cameraReady ? t('takePhotoBtn') : t('loading')}
                                         </button>
                                     </div>
                                 )}
@@ -769,7 +1073,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                     )}
                 </div>
                 <div className="flex gap-3 pt-4">
-                    {!location && <p className="text-xs text-gray-500">Location will sync automatically. Tap the location button above to refresh if needed.</p>}
+                    {!location && <p className="text-xs text-gray-500">{t('locationSyncHint')}</p>}
                     <button type="submit" disabled={!location} className={`w-full py-3 rounded-xl font-bold text-sm shadow-lg shadow-gray-200 ${location ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>{initialData ? t('save') : t('reviewReport')}</button>
                 </div>
             </form>

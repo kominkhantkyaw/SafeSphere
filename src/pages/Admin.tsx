@@ -308,12 +308,12 @@ const Admin: React.FC = () => {
     if (showForm === 'user') return <ModalContainer><UserForm initialData={editingItem} onCancel={() => setShowForm(null)} onSuccess={() => { setShowForm(null); loadData(); }} /></ModalContainer>;
 
     return (
-        <div className="flex flex-col pb-24 p-4 min-h-screen relative animate-in fade-in h-screen">
+        <div className="flex flex-col pb-24 p-4 sm:p-5 md:p-6 min-h-screen relative animate-in fade-in h-screen">
             <div className="flex justify-between items-center mb-6 shrink-0">
                 <div>
                     <h1 className="text-2xl font-bold">{t('commandCenter')}</h1>
                     <div className="flex items-center gap-2 mt-1">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
+                        <span className={`px-2 py-0.5 rounded text-[11px] sm:text-xs font-bold uppercase tracking-wide border ${
                             currentUser?.role === 'Admin' ? 'bg-black text-white border-black' :
                             currentUser?.role === 'Responder' ? 'bg-orange-100 text-orange-700 border-orange-200' :
                             currentUser?.role === 'Reporter' ? 'bg-blue-100 text-blue-700 border-blue-200' :
@@ -326,19 +326,19 @@ const Admin: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid gap-2 mb-6 shrink-0" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+            <div className="flex flex-wrap gap-2 mb-6 shrink-0">
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
-                        className={`flex flex-col items-center justify-center py-3 px-1 rounded-xl border transition-all active:scale-95 ${
+                        className={`flex flex-col items-center justify-center py-3 px-2 sm:px-3 rounded-xl border transition-all active:scale-95 flex-1 min-w-[60px] max-w-[100px] sm:max-w-none ${
                             activeTab === tab.id 
                             ? 'bg-black text-white border-black shadow-md' 
                             : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                         }`}
                     >
                         <tab.icon size={20} className="mb-1" />
-                        <span className="text-[10px] font-bold leading-tight text-center">{t(tab.labelKey)}</span>
+                        <span className="text-[11px] sm:text-xs font-bold leading-tight text-center">{t(tab.labelKey)}</span>
                     </button>
                 ))}
             </div>
@@ -432,7 +432,7 @@ const Admin: React.FC = () => {
                     </div>
 
                     {viewMode === 'map' ? (
-                        <div className="h-[400px] bg-gray-100 rounded-2xl overflow-hidden border border-gray-200 mb-6 relative z-0">
+                        <div className="h-[300px] sm:h-[400px] bg-gray-100 rounded-2xl overflow-hidden border border-gray-200 mb-6 relative z-0">
                             <IncidentMap reports={filteredReports} />
                         </div>
                     ) : (
@@ -549,7 +549,7 @@ const Admin: React.FC = () => {
 
             {showDetail && (
                 <div className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full h-[95vh] sm:h-auto sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10">
+                    <div className="bg-white w-full h-[95vh] sm:h-auto sm:max-h-[90vh] sm:max-w-lg md:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10">
                         <div className="h-48 relative bg-gray-100 shrink-0 border-b border-gray-200">
                              <IncidentMap reports={[showDetail]} centerLat={showDetail.lat} centerLng={showDetail.lng} />
                              <button onClick={() => setShowDetail(null)} className="absolute top-4 right-4 bg-white/90 p-2 rounded-full shadow-md z-[400] hover:bg-white transition-colors"><Icons.X size={20} /></button>
@@ -558,60 +558,60 @@ const Admin: React.FC = () => {
                             <div className="flex justify-between items-center mb-4">
                                 <div className="flex items-center gap-2"><span className="text-xs font-bold text-gray-500">{showDetail.timestamp}</span>{showDetail.status === 'resolved' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded font-bold">ARCHIVED</span>}</div>
                                 {(currentUser?.role === 'Admin' || currentUser?.role === 'Responder') && (
-                                    <button onClick={() => { if (isEditingDetail) handleSaveDetail(); else setIsEditingDetail(true); }} className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${isEditingDetail ? 'bg-black text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{isEditingDetail ? 'Save Changes' : 'Edit Details'}</button>
+                                    <button onClick={() => { if (isEditingDetail) handleSaveDetail(); else setIsEditingDetail(true); }} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors min-h-[36px] ${isEditingDetail ? 'bg-black text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{isEditingDetail ? t('saveChanges') : t('editDetails')}</button>
                                 )}
                             </div>
                             {isEditingDetail ? (
                                 <div className="space-y-4 mb-6 bg-gray-50 p-4 rounded-xl border border-blue-200 animate-in fade-in ring-2 ring-blue-100">
-                                    <h3 className="text-xs font-bold text-blue-600 uppercase mb-2">Editing Mode</h3>
-                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase">Type</label><select className="w-full p-2 rounded border text-sm bg-white" value={editData.type} onChange={e => setEditData({...editData, type: e.target.value})}><option>Structural Fire</option><option>Flash Flood</option><option>Medical Emergency</option><option>Power Outage</option><option>Hazardous Spill</option><option>Other</option></select></div>
-                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase">Description</label><textarea className="w-full p-2 rounded border text-sm" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} rows={3} /></div>
+                                    <h3 className="text-xs font-bold text-blue-600 uppercase mb-2">{t('editingMode')}</h3>
+                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('hazardType')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.type} onChange={e => setEditData({...editData, type: e.target.value})}><option>Structural Fire</option><option>Flash Flood</option><option>Medical Emergency</option><option>Power Outage</option><option>Hazardous Spill</option><option>Other</option></select></div>
+                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('description')}</label><textarea className="w-full p-2.5 rounded border text-sm" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} rows={3} /></div>
                                     
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div><label className="text-[10px] font-bold text-gray-500 uppercase">Contact Name</label><input type="text" className="w-full p-2 rounded border text-sm bg-white" value={editData.contactPerson || ''} onChange={e => setEditData({...editData, contactPerson: e.target.value})} /></div>
-                                        <div><label className="text-[10px] font-bold text-gray-500 uppercase">Contact Phone</label><input type="text" className="w-full p-2 rounded border text-sm bg-white" value={editData.contactPhone || ''} onChange={e => setEditData({...editData, contactPhone: e.target.value})} /></div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('contactNameLabel')}</label><input type="text" className="w-full p-2.5 rounded border text-sm bg-white" value={editData.contactPerson || ''} onChange={e => setEditData({...editData, contactPerson: e.target.value})} /></div>
+                                        <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('contactPhoneLabel')}</label><input type="text" className="w-full p-2.5 rounded border text-sm bg-white" value={editData.contactPhone || ''} onChange={e => setEditData({...editData, contactPhone: e.target.value})} /></div>
                                     </div>
                                     
-                                    <div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] font-bold text-gray-500 uppercase">Urgency</label><select className="w-full p-2 rounded border text-sm bg-white" value={editData.urgency} onChange={e => setEditData({...editData, urgency: e.target.value as any})}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div><div><label className="text-[10px] font-bold text-gray-500 uppercase">Department</label><select className="w-full p-2 rounded border text-sm bg-white" value={editData.department} onChange={e => setEditData({...editData, department: e.target.value})}><option>Maintenance</option><option>IT</option><option>Operations</option><option>Security</option><option>HR</option></select></div></div>
-                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase">Status</label><select className="w-full p-2 rounded border text-sm bg-white" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})}><option value="pending">Pending</option><option value="active">Active</option><option value="approved">Approved</option><option value="info_requested">Info Requested</option><option value="resolved">Resolved</option></select></div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('urgencyLabel')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.urgency} onChange={e => setEditData({...editData, urgency: e.target.value as any})}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('incidentLocation')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.department} onChange={e => setEditData({...editData, department: e.target.value})}><option>Main Building</option><option>Office</option><option>Company Compound</option><option>Warehouse</option><option>Workshop</option><option>Parking Lot</option><option>Factory</option><option>Construction Site</option><option>School</option><option>City Centre</option><option>Highway</option><option>Airport</option><option>Urban Area</option><option>Rural Area</option><option>Other</option></select></div></div>
+                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('status')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})}><option value="pending">{t('pendingStatus')}</option><option value="active">Active</option><option value="approved">{t('approvedStatus')}</option><option value="info_requested">{t('infoRequestedStatus')}</option><option value="resolved">{t('resolvedStatus')}</option></select></div>
                                 </div>
                             ) : (
                                 <>
                                     <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold uppercase text-blue-600 bg-blue-50 px-2 py-1 rounded">{showDetail.type}</span><StatusIcon status={showDetail.status} /></div>
                                     <h2 className="text-xl font-bold mb-4 leading-tight">{translateDescription(showDetail.description)}</h2>
                                     <div className="space-y-4 mb-6 text-sm text-gray-700">
-                                        <div className="bg-gray-50 p-3 rounded-lg flex justify-between border border-gray-100"><span>Urgency: <strong className={showDetail.urgency === 'Critical' ? 'text-red-600' : ''}>{showDetail.urgency}</strong></span><span>Dept: <strong>{showDetail.department}</strong></span></div>
+                                        <div className="bg-gray-50 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between gap-1 border border-gray-100"><span>{t('urgencyLabel')}: <strong className={showDetail.urgency === 'Critical' ? 'text-red-600' : ''}>{showDetail.urgency}</strong></span><span>{t('incidentLocation')}: <strong>{showDetail.department}</strong></span></div>
                                         {(showDetail.contactPerson || showDetail.contactPhone) && (
                                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex flex-col gap-1">
-                                                <div className="font-bold text-xs text-blue-600 uppercase">Reported By</div>
-                                                <div className="flex justify-between">
-                                                    <span>{showDetail.contactPerson || 'N/A'}</span>
+                                                <div className="font-bold text-xs text-blue-600 uppercase">{t('reportedBy')}</div>
+                                                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                                                    <span>{showDetail.contactPerson || t('notAvailable')}</span>
                                                     <span className="font-mono">{showDetail.contactPhone}</span>
                                                 </div>
                                             </div>
                                         )}
-                                        {showDetail.structuralDamage && <div className="bg-gray-50 p-3 rounded-lg border border-gray-100"><div className="font-bold text-xs text-gray-400 uppercase mb-1">Advanced Assessment</div><p>Damage: {showDetail.structuralDamage}</p><p>Est. Cost: €{showDetail.estCost}</p></div>}
+                                        {showDetail.structuralDamage && <div className="bg-gray-50 p-3 rounded-lg border border-gray-100"><div className="font-bold text-xs text-gray-400 uppercase mb-1">{t('advancedAssessment')}</div><p>{t('damagePrefix')}: {showDetail.structuralDamage}</p><p>{t('estCostPrefix')}: €{showDetail.estCost}</p></div>}
                                     </div>
                                 </>
                             )}
                             <div className="flex flex-col gap-3 mb-6">
                                 <div className="flex gap-2">
-                                    {can('approve', 'report') && showDetail.status !== 'approved' && showDetail.status !== 'resolved' && <button onClick={() => handleApproveReport(showDetail.id)} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700 shadow-lg flex items-center justify-center gap-2"><Icons.CheckCircle size={18} /> Approve</button>}
-                                    {can('request_info', 'report') && showDetail.status !== 'resolved' && <button onClick={() => handleRequestInfo(showDetail.id)} className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold text-sm hover:bg-yellow-600 shadow-lg flex items-center justify-center gap-2"><Icons.HelpCircle size={18} /> Request Info</button>}
+                                    {can('approve', 'report') && showDetail.status !== 'approved' && showDetail.status !== 'resolved' && <button onClick={() => handleApproveReport(showDetail.id)} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700 shadow-lg flex items-center justify-center gap-2 min-h-[44px]"><Icons.CheckCircle size={18} /> {t('approveBtn')}</button>}
+                                    {can('request_info', 'report') && showDetail.status !== 'resolved' && <button onClick={() => handleRequestInfo(showDetail.id)} className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold text-sm hover:bg-yellow-600 shadow-lg flex items-center justify-center gap-2 min-h-[44px]"><Icons.HelpCircle size={18} /> {t('requestInfoBtn')}</button>}
                                 </div>
                                 {/* Archive/Resolve Button */}
                                 {can('archive', 'report') && showDetail.status !== 'resolved' && (
-                                    <button onClick={() => handleArchiveReport(showDetail.id)} className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold text-sm hover:bg-black shadow-lg flex items-center justify-center gap-2">
-                                        <Icons.Archive size={18} /> Resolve & Archive
+                                    <button onClick={() => handleArchiveReport(showDetail.id)} className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold text-sm hover:bg-black shadow-lg flex items-center justify-center gap-2 min-h-[44px]">
+                                        <Icons.Archive size={18} /> {t('resolveArchive')}
                                     </button>
                                 )}
-                                {can('delete', 'report') && <button onClick={() => handleDelete(showDetail.id, 'report')} className="w-full py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 flex items-center justify-center gap-2 font-bold"><Icons.Trash size={16}/> Delete Record</button>}
+                                {can('delete', 'report') && <button onClick={() => handleDelete(showDetail.id, 'report')} className="w-full py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 flex items-center justify-center gap-2 font-bold min-h-[44px]"><Icons.Trash size={16}/> {t('deleteRecord')}</button>}
                             </div>
 
                             <div className="border-t pt-4">
-                                <h3 className="font-bold text-sm mb-3 flex items-center gap-2 text-gray-700"><Icons.FileText size={16} /> Internal Notes</h3>
-                                <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1 custom-scrollbar">{showDetail.comments && showDetail.comments.length > 0 ? showDetail.comments.map((comment) => (<div key={comment.id} className="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100"><div className="flex justify-between items-center mb-1"><span className="font-bold text-xs text-blue-600">{comment.author} ({comment.role})</span><span className="text-[10px] text-gray-400">{comment.timestamp}</span></div><p className="text-gray-700">{comment.text}</p></div>)) : <div className="text-gray-400 text-xs italic text-center py-2 bg-gray-50 rounded border border-dashed">No internal notes yet.</div>}</div>
-                                <div className="flex gap-2"><input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Add internal note..." className="flex-1 p-3 rounded-xl border text-sm focus:border-black focus:ring-0 transition-colors" onKeyDown={(e) => e.key === 'Enter' && handleAddComment()} /><button onClick={handleAddComment} className="p-3 bg-black text-white rounded-xl hover:bg-gray-800 transition-colors"><Icons.Check size={16} /></button></div>
+                                <h3 className="font-bold text-sm mb-3 flex items-center gap-2 text-gray-700"><Icons.FileText size={16} /> {t('internalNotes')}</h3>
+                                <div className="space-y-3 mb-4 max-h-40 overflow-y-auto pr-1 custom-scrollbar">{showDetail.comments && showDetail.comments.length > 0 ? showDetail.comments.map((comment) => (<div key={comment.id} className="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100"><div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-1 gap-0.5"><span className="font-bold text-xs text-blue-600">{comment.author} ({comment.role})</span><span className="text-[11px] sm:text-xs text-gray-400">{comment.timestamp}</span></div><p className="text-gray-700">{comment.text}</p></div>)) : <div className="text-gray-400 text-xs italic text-center py-2 bg-gray-50 rounded border border-dashed">{t('noInternalNotes')}</div>}</div>
+                                <div className="flex gap-2"><input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder={t('addInternalNote')} className="flex-1 p-3 rounded-xl border text-sm focus:border-black focus:ring-0 transition-colors" onKeyDown={(e) => e.key === 'Enter' && handleAddComment()} /><button onClick={handleAddComment} className="p-3 bg-black text-white rounded-xl hover:bg-gray-800 transition-colors min-w-[44px] min-h-[44px]"><Icons.Check size={16} /></button></div>
                             </div>
                             <ActionButtons item={showDetail} type="report" />
                         </div>

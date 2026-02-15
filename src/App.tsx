@@ -243,12 +243,12 @@ const AppContent: React.FC = () => {
 
     return (
         <div 
-            className={`min-h-screen min-h-[100dvh] font-sans w-full max-w-md sm:max-w-lg md:max-w-xl mx-auto relative shadow-2xl overflow-x-hidden flex flex-col transition-colors duration-300`}
+            className={`min-h-screen min-h-[100dvh] font-sans w-full max-w-full sm:max-w-lg md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto relative shadow-2xl overflow-x-hidden flex flex-col transition-colors duration-300`}
             style={{ backgroundColor: effectiveDarkMode ? '#1f2937' : theme.backgroundColor, color: effectiveDarkMode ? '#fff' : '#000' }}
         >
             
             {/* Header with Settings Trigger */}
-            <div className="sticky top-0 z-40">
+            <div className="sticky top-0 z-40 safe-top">
                 <Header 
                     title={activeTab === 'profile' ? t('myProfile') : 
                            activeTab === 'settings' ? t('settings') : 
@@ -281,7 +281,7 @@ const AppContent: React.FC = () => {
                 </div>
             )}
 
-            <div className={`flex-1 overflow-y-auto no-scrollbar relative flex flex-col ${!BACK_ENABLED_TABS.includes(activeTab as typeof BACK_ENABLED_TABS[number]) ? 'pb-32' : ''}`}>
+            <div className={`flex-1 overflow-y-auto no-scrollbar relative flex flex-col ${!BACK_ENABLED_TABS.includes(activeTab as typeof BACK_ENABLED_TABS[number]) ? 'pb-content-nav' : ''}`}>
                 <div className="flex-1">
                     {renderContent()}
                 </div>
@@ -331,7 +331,32 @@ const AppContent: React.FC = () => {
                 onClose={() => setShowQRScanner(false)}
                 onScan={(data) => {
                     console.log('Scanned:', data);
-                    // Handle scanned data
+                    const trimmed = data.trim();
+
+                    // Navigate to resources page when a resource QR is scanned
+                    try {
+                        const parsed = JSON.parse(trimmed);
+                        if (parsed && parsed.type === 'resource') {
+                            setShowQRScanner(false);
+                            setActiveTab('resources');
+                            return;
+                        }
+                    } catch { /* not JSON */ }
+
+                    // Rescue-centre IDs (SAFESPHERE-RC-*) — keep scanner open to show details
+                    if (/^SAFESPHERE-RC-\d+$/.test(trimmed)) return;
+
+                    // SafeSphere internal URLs — navigate to the right tab
+                    try {
+                        const url = new URL(trimmed);
+                        const path = url.pathname.toLowerCase();
+                        if (path.includes('/report')) { setShowQRScanner(false); setActiveTab('report'); }
+                        else if (path.includes('/resource')) { setShowQRScanner(false); setActiveTab('resources'); }
+                        else if (path.includes('/map')) { setShowQRScanner(false); setActiveTab('map'); }
+                        else if (path.includes('/chat')) { setShowQRScanner(false); setActiveTab('chat'); }
+                        else if (path.includes('/learn')) { setShowQRScanner(false); setActiveTab('learn'); }
+                        // External URL — scanner already shows "Open URL" button
+                    } catch { /* not a URL */ }
                 }}
             />
         </div>

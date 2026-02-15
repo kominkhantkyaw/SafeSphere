@@ -4,15 +4,23 @@ import { Icons } from '../components/Icon';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useUser } from '../contexts/UserContext';
 import { fetchAlerts, fetchChecklist, fetchDrills, fetchEarthquakesByRange, fetchReports } from '../services/api';
-import { fetchWeather, WeatherData } from '../services/weather';
+import { fetchWeather, fetchLocationName, WeatherData, LocationInfo } from '../services/weather';
 
 interface HomeProps {
     onNavigate: (tab: string) => void;
     onOpenSystemStatus?: () => void;
 }
 
-/** Replaces first space with <br/> for two-line labels (e.g. "View Score Breakdown" → "View" / "Score Breakdown") */
-const breakFirstSpace = (s: string) => s.replace(' ', '<br/>');
+/** Splits text at the first space into two lines for compact button labels (safe — no innerHTML). */
+const TwoLineLabel: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
+    const idx = text.indexOf(' ');
+    if (idx === -1) return <span className={className}>{text}</span>;
+    return (
+        <span className={className}>
+            {text.slice(0, idx)}<br />{text.slice(idx + 1)}
+        </span>
+    );
+};
 
 const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
     const { t, translateDescription, translateAlertTitle } = useLanguage();
@@ -45,6 +53,9 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
     const [weather, setWeather] = useState<WeatherData | null>(null);
     const [weatherLoading, setWeatherLoading] = useState(false);
 
+    // Reverse-geocoded location name
+    const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
+
     useEffect(() => {
         if ('geolocation' in navigator) {
             setCoordsLoading(true);
@@ -67,22 +78,21 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
         }
     }, []);
 
-    const fetchWeatherForCoords = (coords: { lat: number; lng: number }, forceRefresh = false) => {
+    const fetchAllForCoords = (coords: { lat: number; lng: number }, forceRefresh = false) => {
+        // Fetch weather
         setWeatherLoading(true);
         fetchWeather(coords.lat, coords.lng, forceRefresh)
-            .then((data) => {
-                setWeather(data);
-                setWeatherLoading(false);
-            })
-            .catch(() => {
-                setWeather(null);
-                setWeatherLoading(false);
-            });
+            .then((data) => { setWeather(data); setWeatherLoading(false); })
+            .catch(() => { setWeather(null); setWeatherLoading(false); });
+        // Fetch location name (reverse geocoding)
+        fetchLocationName(coords.lat, coords.lng)
+            .then((info) => { if (info) setLocationInfo(info); })
+            .catch(() => { /* keep previous */ });
     };
 
     useEffect(() => {
         if (!liveCoords) return;
-        fetchWeatherForCoords(liveCoords);
+        fetchAllForCoords(liveCoords);
     }, [liveCoords?.lat, liveCoords?.lng]);
 
     const syncLiveData = () => {
@@ -94,20 +104,20 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                     setLiveCoords(coords);
                     setCoordsError(false);
                     setCoordsLoading(false);
-                    fetchWeatherForCoords(coords, true);
+                    fetchAllForCoords(coords, true);
                 },
                 () => {
                     const fallback = { lat: 46.6231, lng: 14.3025 };
                     setLiveCoords(fallback);
                     setCoordsError(true);
                     setCoordsLoading(false);
-                    fetchWeatherForCoords(fallback, true);
+                    fetchAllForCoords(fallback, true);
                 },
                 { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
             );
         } else if (liveCoords) {
             setWeatherLoading(true);
-            fetchWeatherForCoords(liveCoords, true);
+            fetchAllForCoords(liveCoords, true);
         }
     };
 
@@ -419,31 +429,49 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
     }, [seismicWaveData, alerts]);
 
     return (
-        <div className="home-page-content flex flex-col space-y-6 pb-24 p-4 relative min-h-screen">
-            {/* Live Coordinates & Weather Bar - centred, same style as Check Status */}
+        <div className="home-page-content flex flex-col space-y-6 pb-24 p-4 sm:p-5 md:p-6 relative min-h-screen">
+            {/* Live Location & Weather Bar */}
             <button
                 type="button"
                 onClick={syncLiveData}
                 disabled={coordsLoading || weatherLoading}
                 aria-label={t('syncLiveData')}
-                className="flex items-center justify-between w-full px-4 sm:px-5 py-3 rounded-2xl bg-slate-700 border border-slate-700 text-white shadow-lg cursor-pointer hover:bg-slate-600 active:bg-slate-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors text-left outline-none focus:outline-none focus:ring-0"
+                className="w-full rounded-2xl bg-slate-700 border border-slate-700 text-white shadow-lg cursor-pointer hover:bg-slate-600 active:bg-slate-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors text-left outline-none focus:outline-none focus:ring-0"
             >
-                <div className="flex items-center gap-2 min-w-0">
-                    <Icons.MapPin size={18} className="text-green-400 shrink-0" />
-                    <div className="min-w-0">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">{t('liveCoordinates')}</div>
-                        <div className="text-sm font-mono font-medium truncate">
-                            {coordsLoading ? '...' : liveCoords ? `${liveCoords.lat.toFixed(4)}, ${liveCoords.lng.toFixed(4)}${coordsError ? ' (approx)' : ''}` : '—'}
-                        </div>
+                {/* Top row: Location name + Weather condition */}
+                <div className="flex items-center justify-between px-4 sm:px-5 pt-3 pb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Icons.MapPin size={16} className="text-green-400 shrink-0" />
+                        <span className="text-sm font-bold truncate">
+                            {coordsLoading ? '...' : locationInfo ? locationInfo.display : liveCoords ? `${liveCoords.lat.toFixed(4)}, ${liveCoords.lng.toFixed(4)}` : '—'}
+                            {coordsError && !coordsLoading && <span className="text-slate-400 font-normal text-xs ml-1">({t('approx')})</span>}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 pl-3">
+                        {weather && <span className="text-lg leading-none">{weather.conditionIcon}</span>}
+                        <span className="text-sm font-bold">
+                            {weatherLoading ? '...' : weather ? `${weather.temperature}°C` : isOfflineMode ? t('offline') : '—'}
+                        </span>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-slate-500/50">
-                    <Icons.CloudRain size={18} className="text-slate-200" />
-                    <div className="min-w-0">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">{t('weather')}</div>
-                        <div className="text-sm font-medium truncate">
-                            {weatherLoading ? '...' : weather ? weather.displayText : isOfflineMode ? t('offline') : t('weatherUnavailable')}
-                        </div>
+
+                {/* Bottom row: Coordinates + Wind + Condition text */}
+                <div className="flex items-center justify-between px-4 sm:px-5 pb-3 pt-0">
+                    <div className="flex items-center gap-3 min-w-0 text-[11px] text-slate-300">
+                        <span className="font-mono">
+                            {coordsLoading ? '...' : liveCoords ? `${liveCoords.lat.toFixed(4)}, ${liveCoords.lng.toFixed(4)}` : ''}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-300 shrink-0">
+                        {weather && !weatherLoading && (
+                            <>
+                                <span>{weather.condition}</span>
+                                <span className="text-slate-500">•</span>
+                                <span>{weather.windSpeed} km/h {weather.windDirection}</span>
+                            </>
+                        )}
+                        {weatherLoading && <span>...</span>}
+                        {!weather && !weatherLoading && !isOfflineMode && <span>{t('weatherUnavailable')}</span>}
                     </div>
                 </div>
             </button>
@@ -504,10 +532,10 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                             </span>
                         </div>
                     </div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">Score</span>
+                    <span className="text-[11px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{t('score')}</span>
                     <div className="flex items-center gap-0.5 mt-0.5">
                         <Icons.TrendingUp size={10} className={calculatedScore >= 75 ? "text-green-500" : calculatedScore >= 40 ? "text-amber-500" : "text-red-500"} />
-                        <span className={`text-[9px] font-bold ${calculatedScore >= 75 ? "text-green-500" : calculatedScore >= 40 ? "text-amber-500" : "text-red-500"}`}>
+                        <span className={`text-[10px] sm:text-[11px] font-bold ${calculatedScore >= 75 ? "text-green-500" : calculatedScore >= 40 ? "text-amber-500" : "text-red-500"}`}>
                             {`${calculatedScore}%`}
                         </span>
                     </div>
@@ -520,12 +548,12 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                     <h2 className="text-lg font-bold flex items-center gap-2">
                         {t('activeAlerts')}
                         {!isOfflineMode && (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200" title={t('liveData') || 'Live data'}>
-                                Live
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] sm:text-xs font-bold border border-emerald-200" title={t('liveData') || 'Live data'}>
+                                {t('liveBadge')}
                             </span>
                         )}
                         {isOfflineMode && (
-                            <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold border border-orange-200">
+                            <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[11px] sm:text-xs font-bold border border-orange-200">
                                 {t('offline')}
                             </span>
                         )}
@@ -544,11 +572,29 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                     {sortedAlerts.slice(0, 3).map(alert => (
                         <div key={alert.id} className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 border-l-4 ${
                             alert.type === 'earthquake' ? 'border-l-amber-600' :
+                            alert.type === 'tsunami' ? 'border-l-cyan-600' :
+                            alert.type === 'volcano' ? 'border-l-red-700' :
+                            alert.type === 'hurricane' ? 'border-l-violet-600' :
+                            alert.type === 'storm' ? 'border-l-indigo-500' :
+                            alert.type === 'flood' ? 'border-l-blue-500' :
+                            alert.type === 'fire' ? 'border-l-orange-600' :
                             alert.severity === 'high' ? 'border-l-red-500' : 'border-l-orange-500'
                         }`}>
                             <div className="shrink-0 mt-1">
                                 {alert.type === 'earthquake' ? (
                                     <Icons.AlertTriangle className="text-amber-600" />
+                                ) : alert.type === 'tsunami' ? (
+                                    <Icons.AlertTriangle className="text-cyan-600" />
+                                ) : alert.type === 'volcano' ? (
+                                    <Icons.AlertTriangle className="text-red-700" />
+                                ) : alert.type === 'hurricane' ? (
+                                    <Icons.AlertTriangle className="text-violet-600" />
+                                ) : alert.type === 'storm' ? (
+                                    <Icons.AlertTriangle className="text-indigo-500" />
+                                ) : alert.type === 'flood' ? (
+                                    <Icons.AlertTriangle className="text-blue-500" />
+                                ) : alert.type === 'fire' ? (
+                                    <Icons.Emergency className="text-orange-600" />
                                 ) : (
                                     <Icons.Emergency className={alert.severity === 'high' ? 'text-red-500' : 'text-orange-500'} />
                                 )}
@@ -557,7 +603,19 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h3 className="font-bold text-sm">{translateAlertTitle(alert.title)}</h3>
                                     {alert.type === 'earthquake' && (
-                                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">Seismic</span>
+                                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] sm:text-xs font-bold">{t('seismicBadge')}</span>
+                                    )}
+                                    {alert.type === 'tsunami' && (
+                                        <span className="px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 text-[11px] sm:text-xs font-bold">{t('tsunami')}</span>
+                                    )}
+                                    {alert.type === 'volcano' && (
+                                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] sm:text-xs font-bold">{t('volcanicBadge')}</span>
+                                    )}
+                                    {alert.type === 'hurricane' && (
+                                        <span className="px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[11px] sm:text-xs font-bold">{t('hurricane')}</span>
+                                    )}
+                                    {alert.type === 'storm' && (
+                                        <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[11px] sm:text-xs font-bold">{t('storm')}</span>
                                     )}
                                     <span className="text-xs text-gray-400 ml-auto">{alert.timestamp}</span>
                                 </div>
@@ -577,7 +635,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                     aria-label={t('reportIncident')}
                 >
                     <Icons.Emergency size={28} className="text-red-500" />
-                    <span className="font-bold text-sm text-gray-900" dangerouslySetInnerHTML={{ __html: breakFirstSpace(t('reportIncident')) }} />
+                    <TwoLineLabel text={t('reportIncident')} className="font-bold text-sm text-gray-900" />
                 </button>
                 <button
                     onClick={() => setShowScoreDetails(true)}
@@ -587,7 +645,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                     <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center shadow-inner ring-1 ring-emerald-200/50">
                         <Icons.Trophy size={28} className="fill-amber-400 text-amber-600" strokeWidth={1.5} style={{ filter: 'drop-shadow(0 1px 2px rgba(251,191,36,0.5))' }} />
                     </div>
-                    <span className="font-bold text-sm text-gray-900" dangerouslySetInnerHTML={{ __html: breakFirstSpace(t('viewScoreBreakdown')) }} />
+                    <TwoLineLabel text={t('viewScoreBreakdown')} className="font-bold text-sm text-gray-900" />
                 </button>
             </div>
 
@@ -641,7 +699,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2 text-[9px] text-slate-600 mb-2" title={t('severityLegendHint')}>
+                <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-[11px] text-slate-600 mb-2" title={t('severityLegendHint')}>
                     {(() => {
                         const { minMag, maxMag } = seismicWaveData;
                         const range = Math.max(maxMag - minMag, 0.5);
@@ -652,9 +710,9 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         const highRange = `${modMax.toFixed(1)}–${maxMag.toFixed(1)}M`;
                         return (
                             <>
-                                <span className="flex items-center gap-1" title={`${t('lowSeverity')} (${lowRange})`}><span className="w-2 h-2 rounded-full bg-green-500" /> Low {lowRange}</span>
-                                <span className="flex items-center gap-1" title={`${t('moderateSeverity')} (${modRange})`}><span className="w-2 h-2 rounded-full bg-orange-500" /> Mod {modRange}</span>
-                                <span className="flex items-center gap-1" title={`${t('highSeverity')} (${highRange})`}><span className="w-2 h-2 rounded-full bg-red-500" /> High {highRange}</span>
+                                <span className="flex items-center gap-1" title={`${t('lowSeverity')} (${lowRange})`}><span className="w-2 h-2 rounded-full bg-green-500" /> {t('low')} {lowRange}</span>
+                                <span className="flex items-center gap-1" title={`${t('moderateSeverity')} (${modRange})`}><span className="w-2 h-2 rounded-full bg-orange-500" /> {t('modLabel')} {modRange}</span>
+                                <span className="flex items-center gap-1" title={`${t('highSeverity')} (${highRange})`}><span className="w-2 h-2 rounded-full bg-red-500" /> {t('high')} {highRange}</span>
                             </>
                         );
                     })()}
@@ -811,8 +869,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                                                 style={{ height: `${Math.max(pct > 0 ? 6 : 0, h)}px` }}
                                                             />
                                                         </div>
-                                                        <span className="text-[9px] font-medium text-slate-400 text-center leading-tight line-clamp-2">{label}</span>
-                                                        <span className="text-[10px] font-bold text-white">{Math.round(value)}%</span>
+                                                        <span className="text-[10px] sm:text-[11px] font-medium text-slate-400 text-center leading-tight line-clamp-2">{label}</span>
+                                                        <span className="text-[11px] sm:text-xs font-bold text-white">{Math.round(value)}%</span>
                                                     </div>
                                                 );
                                             })}
@@ -823,7 +881,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         })()}
 
                         <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600/60 mb-6">
-                            <h4 className="font-bold text-xs uppercase text-slate-400 mb-3 flex items-center gap-2"><Icons.Zap size={12} className="text-amber-400"/> Recommended Actions</h4>
+                            <h4 className="font-bold text-xs uppercase text-slate-400 mb-3 flex items-center gap-2"><Icons.Zap size={12} className="text-amber-400"/> {t('recommendedActions')}</h4>
                             <ul className="space-y-3">
                                 {kitPoints < kitMax && (
                                     <li 
@@ -922,6 +980,9 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                         <option value="flood">{t('flood')}</option>
                                         <option value="fire">{t('fire')}</option>
                                         <option value="earthquake">{t('earthquake')}</option>
+                                        <option value="tsunami">{t('tsunami')}</option>
+                                        <option value="volcano">{t('volcano')}</option>
+                                        <option value="hurricane">{t('hurricane')}</option>
                                         <option value="storm">{t('storm')}</option>
                                     </select>
                                 </div>

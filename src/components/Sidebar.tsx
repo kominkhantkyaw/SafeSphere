@@ -181,9 +181,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                             aria-label={t('language')}
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                            <option value="en">{t('english')}</option>
-                            <option value="de">{t('german')}</option>
-                            <option value="my">{t('myanmar')}</option>
+                            <option value="en">🇬🇧 {t('english')}</option>
+                            <option value="de">🇩🇪 {t('german')}</option>
+                            <option value="my">🇲🇲 {t('myanmar')}</option>
                         </select>
                     </div>
 
@@ -203,9 +203,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 aria-label={t('themeMode')}
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             >
-                                <option value="light">{t('light')}</option>
-                                <option value="dark">{t('dark')}</option>
-                                <option value="system">{t('system')}</option>
+                                <option value="light">☀️ {t('light')}</option>
+                                <option value="dark">🌙 {t('dark')}</option>
+                                <option value="system">💻 {t('system')}</option>
                             </select>
                             {onThemeSettingsClick && (
                                 <button

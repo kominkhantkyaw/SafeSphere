@@ -296,7 +296,7 @@ const Prepare: React.FC<PrepareProps> = ({ onNavigate }) => {
     const progress = checklist.length > 0 ? (completedCount / checklist.length) * 100 : 0;
 
     return (
-        <div className="flex flex-col pb-24 p-4 relative min-h-screen">
+        <div className="flex flex-col pb-24 p-4 sm:p-5 md:p-6 relative min-h-screen">
             <Onboarding onGoToLearn={() => onNavigate?.('learn')} />
 
             <div className="flex justify-between items-center mb-6">
@@ -796,10 +796,10 @@ const Prepare: React.FC<PrepareProps> = ({ onNavigate }) => {
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('dateLabel')}</label>
                                 <input type="date" className="w-full p-2 border rounded-lg" value={drillDate} onChange={e => setDrillDate(e.target.value)} required />
                             </div>
-                             <div className="grid grid-cols-2 gap-2">
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('alertType')}</label>
-                                    <select className="w-full p-2 border rounded-lg bg-white" value={drillType} onChange={e => setDrillType(e.target.value as any)}>
+                                    <select className="w-full p-2.5 border rounded-lg bg-white" value={drillType} onChange={e => setDrillType(e.target.value as any)}>
                                         <option>Fire</option>
                                         <option>Evacuation</option>
                                         <option>Lockdown</option>

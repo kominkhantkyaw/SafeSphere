@@ -7,27 +7,30 @@ type MessageType = 'text' | 'image' | 'file' | 'voice' | 'location';
 
 // International SOS emoji signs - universally recognisable, no typing needed
 const SOS_EMOJIS = [
-    { emoji: '🆘', labelKey: 'emojiUrgentHelp' },
-    { emoji: '🚨', labelKey: 'emojiEmergency' },
-    { emoji: '⚠️', labelKey: 'emojiWarning' },
-    { emoji: '🏥', labelKey: 'emojiMedical' },
-    { emoji: '🚒', labelKey: 'emojiFire' },
-    { emoji: '💧', labelKey: 'emojiFlood' },
-    { emoji: '🌍', labelKey: 'emojiEarthquake' },
-    { emoji: '👍', labelKey: 'emojiOk' },
-    { emoji: '🏠', labelKey: 'emojiShelter' },
-    { emoji: '🔌', labelKey: 'emojiNoElectricity' },
-    { emoji: '📵', labelKey: 'emojiNoInternet' },
-    { emoji: '🤕', labelKey: 'emojiWounded' },
-    { emoji: '🤐', labelKey: 'emojiCannotSpeak' },
-    { emoji: '🚪', labelKey: 'emojiTrapped' },
-    { emoji: '🚰', labelKey: 'emojiNeedWater' },
-    { emoji: '🍞', labelKey: 'emojiNeedFood' },
-    { emoji: '🤫', labelKey: 'emojiSilent' },
-    { emoji: '☣️', labelKey: 'emojiChemical' },
-    { emoji: '☠️', labelKey: 'emojiPoison' },
-    { emoji: '🔫', labelKey: 'emojiShooterActive' }
+    { emoji: '🆘', labelKey: 'UrgentHelp' },
+    { emoji: '⚠️', labelKey: 'Warning' },
+    { emoji: '🏥', labelKey: 'Medical' },
+    { emoji: '🚒', labelKey: 'FireTruck' },
+    { emoji: '💧', labelKey: 'Flood' },
+    { emoji: '🌍', labelKey: 'Earthquake' },
+    { emoji: '👍', labelKey: 'Ok' },
+    { emoji: '🏠', labelKey: 'Shelter' },
+    { emoji: '🔌', labelKey: 'NoElectricity' },
+    { emoji: '📵', labelKey: 'NoInternet' },
+    { emoji: '🤕', labelKey: 'Wounded' },
+    { emoji: '🤐', labelKey: 'CannotSpeak' },
+    { emoji: '🚪', labelKey: 'Trapped' },
+    { emoji: '🚰', labelKey: 'NeedWater' },
+    { emoji: '🍞', labelKey: 'NeedFood' },
+    { emoji: '☢️', labelKey: 'Chemical' },
+    { emoji: '☠️', labelKey: 'Poison' },
+    { emoji: '🔫', labelKey: 'ShooterActive' },
+    { emoji: '👮', labelKey: 'Police' },
+    { emoji: '🚑', labelKey: 'Ambulance' },
+    { emoji: '🚨', labelKey: 'Emergency' },
+    { emoji: '🛩️', labelKey: 'Drone'},
 ] as const;
+
 
 interface Message {
     id: number;
@@ -35,14 +38,13 @@ interface Message {
     content: string;
     timestamp: string;
     isOwn: boolean;
-    avatar?: string;
     type?: MessageType;
     imageUrl?: string;
-    fileName?: string;
     fileUrl?: string;
+    fileName?: string;
     voiceUrl?: string;
     voiceDuration?: number;
-    location?: { lat: number; lng: number; place?: string };
+    location?: { lat: number; lng: number };
 }
 
 interface Conversation {
@@ -62,6 +64,7 @@ const Chat: React.FC = () => {
     const [view, setView] = useState<'list' | 'chat'>('list');
     const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
     const [messageText, setMessageText] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
     const [isRecording, setIsRecording] = useState(false);
     const [locationLoading, setLocationLoading] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -266,7 +269,7 @@ const Chat: React.FC = () => {
 
     const handleShareLocation = () => {
         if (!('geolocation' in navigator)) {
-            alert('Geolocation is not supported.');
+            alert(t('geolocationNotSupported'));
             return;
         }
         setLocationLoading(true);
@@ -277,7 +280,7 @@ const Chat: React.FC = () => {
                 setLocationLoading(false);
             },
             () => {
-                alert('Unable to get location. Please enable location services.');
+                alert(t('unableToGetLocation'));
                 setLocationLoading(false);
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -289,7 +292,7 @@ const Chat: React.FC = () => {
     const startRecording = async () => {
         if (isRecording) return;
         if (!selectedChat || !navigator.mediaDevices?.getUserMedia) {
-            alert('Voice recording is not supported.');
+            alert(t('voiceRecordingNotSupported'));
             return;
         }
         try {
@@ -314,7 +317,7 @@ const Chat: React.FC = () => {
             recorder.start();
             setIsRecording(true);
         } catch (err) {
-            alert('Could not access microphone. Please check permissions.');
+            alert(t('microphoneAccessFailed'));
         }
     };
 
@@ -500,13 +503,13 @@ const Chat: React.FC = () => {
                                 <span>🆘</span>
                                 <span>{t('urgentHelp')}</span>
                             </button>
-                            <div className="grid grid-cols-5 gap-2">
+                            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                                 {SOS_EMOJIS.map(({ emoji, labelKey }) => (
                                     <button
                                         key={emoji}
                                         type="button"
                                         onClick={() => handleEmojiInsert(emoji)}
-                                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-2xl transition-colors"
+                                        className="w-11 h-11 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 text-2xl transition-colors min-w-[44px] min-h-[44px]"
                                         title={t(labelKey)}
                                     >
                                         {emoji}
@@ -525,7 +528,7 @@ const Chat: React.FC = () => {
                                     ) : (
                                         <Icons.FileText size={16} />
                                     )}
-                                    <span className="truncate max-w-[120px]">{pendingFile.file.name}</span>
+                                    <span className="truncate max-w-[140px] sm:max-w-[180px]">{pendingFile.file.name}</span>
                                     <button type="button" onClick={clearPendingFile} className="p-0.5 rounded hover:bg-blue-100" aria-label="Remove">×</button>
                                 </span>
                             )}
@@ -542,7 +545,7 @@ const Chat: React.FC = () => {
                         <button
                             type="button"
                             onClick={handleAttachment}
-                            className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0"
+                            className="w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
                             title="Attach image or file"
                             aria-label="Attach file"
                         >
@@ -552,7 +555,7 @@ const Chat: React.FC = () => {
                             type="button"
                             onClick={handleShareLocation}
                             disabled={locationLoading}
-                            className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0 disabled:opacity-50"
+                            className="w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0 disabled:opacity-50 min-w-[44px] min-h-[44px]"
                             title="Share live location"
                             aria-label="Share location"
                         >
@@ -569,7 +572,7 @@ const Chat: React.FC = () => {
                             onMouseLeave={stopRecording}
                             onTouchStart={startRecording}
                             onTouchEnd={stopRecording}
-                            className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 ${
+                            className={`w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors shrink-0 min-w-[44px] min-h-[44px] ${
                                 isRecording ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'
                             }`}
                             title="Voice message"
@@ -590,7 +593,7 @@ const Chat: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => setShowEmojiPicker(prev => !prev)}
-                                className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mr-1 ${
+                                className={`w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mr-1 min-w-[44px] min-h-[44px] ${
                                     showEmojiPicker ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-200'
                                 }`}
                                 title={t('sosSigns')}
@@ -602,7 +605,7 @@ const Chat: React.FC = () => {
                         <button
                             type="submit"
                             disabled={!messageText.trim() && !pendingFile && !pendingLocation}
-                            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shrink-0 ${
+                            className={`w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all shrink-0 min-w-[44px] min-h-[44px] ${
                                 (messageText.trim() || pendingFile || pendingLocation) ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-200'
                             }`}
                             title="Send"
@@ -624,62 +627,91 @@ const Chat: React.FC = () => {
                     <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input
                         type="text"
-                        placeholder="Search messages..."
-                        className="w-full pl-10 pr-4 py-2 rounded-full bg-gray-100 border-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={t('searchMessages')}
+                        className="w-full pl-10 pr-10 py-2 rounded-full bg-gray-100 border-none focus:ring-2 focus:ring-blue-500 transition-all"
                     />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            aria-label={t('close')}
+                        >
+                            <Icons.X size={16} />
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Conversations List */}
+            {/* Conversations List (filtered by search) */}
             <div className="px-4 py-2">
-                {conversations.map((conversation) => (
-                    <button
-                        key={conversation.id}
-                        onClick={() => openChat(conversation)}
-                        className="w-full flex items-center gap-3 p-4 hover:bg-white rounded-2xl transition-colors mb-2"
-                    >
-                        <div className="relative">
-                            <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg ${conversation.isAi ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-blue-500 to-purple-500'}`}>
-                                {conversation.isAi ? '🤖' : conversation.id === 1 ? '🚨' : conversation.id === 2 ? '🛡️' : conversation.name.charAt(0)}
+                {(() => {
+                    const q = searchQuery.toLowerCase().trim();
+                    const filtered = q
+                        ? conversations.filter(c => {
+                            const name = (c.nameKey ? t(c.nameKey) : c.name).toLowerCase();
+                            const msg = c.lastMessage.toLowerCase();
+                            return name.includes(q) || msg.includes(q);
+                        })
+                        : conversations;
+
+                    if (filtered.length === 0 && q) {
+                        return (
+                            <div className="flex flex-col items-center justify-center py-16 px-6">
+                                <Icons.Search size={32} className="text-gray-300 mb-3" />
+                                <p className="text-sm text-gray-500 text-center">{t('noSearchResults')}</p>
                             </div>
-                            {conversation.online && !conversation.isAi && (
-                                <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-50"></div>
-                            )}
-                            {conversation.isAi && (
-                                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded">AI</span>
-                            )}
-                        </div>
-                        
-                        <div className="flex-1 text-left">
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="font-semibold text-gray-900">{conversation.nameKey ? t(conversation.nameKey) : conversation.name}</span>
-                                <span className="text-xs text-gray-500">{conversation.timestamp}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-gray-600 truncate flex-1">
-                                    {conversation.lastMessage}
-                                </p>
-                                {conversation.unread > 0 && (
-                                    <span className="ml-2 min-w-[20px] h-5 px-2 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-semibold">
-                                        {conversation.unread}
-                                    </span>
+                        );
+                    }
+
+                    return filtered.map((conversation) => (
+                        <button
+                            key={conversation.id}
+                            onClick={() => openChat(conversation)}
+                            className="w-full flex items-center gap-3 p-4 hover:bg-white rounded-2xl transition-colors mb-2"
+                        >
+                            <div className="relative">
+                                <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg ${conversation.isAi ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-blue-500 to-purple-500'}`}>
+                                    {conversation.isAi ? '🤖' : conversation.id === 1 ? '🚨' : conversation.id === 2 ? '🛡️' : conversation.name.charAt(0)}
+                                </div>
+                                {conversation.online && !conversation.isAi && (
+                                    <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-50"></div>
+                                )}
+                                {conversation.isAi && (
+                                    <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded">AI</span>
                                 )}
                             </div>
-                        </div>
-                    </button>
-                ))}
+                            
+                            <div className="flex-1 text-left">
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold text-gray-900">{conversation.nameKey ? t(conversation.nameKey) : conversation.name}</span>
+                                    <span className="text-xs text-gray-500">{conversation.timestamp}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm text-gray-600 truncate flex-1">
+                                        {conversation.lastMessage}
+                                    </p>
+                                    {conversation.unread > 0 && (
+                                        <span className="ml-2 min-w-[20px] h-5 px-2 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center font-semibold">
+                                            {conversation.unread}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </button>
+                    ));
+                })()}
             </div>
 
-            {/* Empty State (if no conversations) */}
+            {/* Empty State (if no conversations at all) */}
             {conversations.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 px-6">
                     <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                         <Icons.MessageCircle size={40} className="text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Messages Yet</h3>
-                    <p className="text-sm text-gray-500 text-center">
-                        Start a conversation with emergency responders or your community.
-                    </p>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('noMessagesYet')}</h3>
+                    <p className="text-sm text-gray-500 text-center">{t('startConversation')}</p>
                 </div>
             )}
         </div>

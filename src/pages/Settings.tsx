@@ -342,9 +342,9 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         onChange={(e) => handleLanguageChangeRequest(e.target.value as 'en' | 'de' | 'my')}
                                         className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
-                                        <option value="en">{t('english')}</option>
-                                        <option value="de">{t('german')}</option>
-                                        <option value="my">{t('myanmar')}</option>
+                                        <option value="en">🇬🇧 {t('english')}</option>
+                                        <option value="de">🇩🇪 {t('german')}</option>
+                                        <option value="my">🇲🇲 {t('myanmar')}</option>
                                     </select>
                                 </div>
 
@@ -401,9 +401,9 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         aria-label={t('themeMode')}
                                         className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
-                                        <option value="light">{t('light')}</option>
-                                        <option value="dark">{t('dark')}</option>
-                                        <option value="system">{t('system')}</option>
+                                        <option value="light">☀️ {t('light')}</option>
+                                        <option value="dark">🌙 {t('dark')}</option>
+                                        <option value="system">💻 {t('system')}</option>
                                     </select>
                                     {onThemeSettingsClick && (
                                         <button 

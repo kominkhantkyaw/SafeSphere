@@ -50,7 +50,7 @@ const Header: React.FC<HeaderProps> = ({
     }, []);
 
     return (
-        <div className="flex items-center justify-between p-4 bg-white/90 backdrop-blur-sm border-b border-gray-100 transition-colors duration-300">
+        <div className="flex items-center justify-between p-4 sm:p-5 bg-white/90 backdrop-blur-sm border-b border-gray-100 transition-colors duration-300">
             {/* Left Side - Back/Menu Button or Logo */}
             <div className="flex items-center gap-2">
                 {showBackButton ? (

@@ -40,7 +40,7 @@ export interface Alert {
     description: string;
     severity: 'high' | 'moderate' | 'low';
     timestamp: string;
-    type: 'flood' | 'heat' | 'fire' | 'earthquake' | 'general';
+    type: 'flood' | 'heat' | 'fire' | 'earthquake' | 'general' | 'tsunami' | 'volcano' | 'hurricane' | 'storm';
 }
 
 export interface Resource {
@@ -91,6 +91,7 @@ export interface IncidentReport {
     // Contact Info (Optional)
     contactPerson?: string;
     contactPhone?: string;
+    contactEmail?: string;
 
     // Location & Status
     lat: number;

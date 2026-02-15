@@ -34,12 +34,44 @@ export const MOCK_USER: User = {
 
 export const MOCK_ALERTS: Alert[] = [
     {
-        id: 3,
+        id: 7,
         title: 'Earthquake – Myanmar',
         description: 'A magnitude ~5.9–6.0 earthquake struck Myanmar recently (reported Tuesday, 03. Feb 2026).',
         severity: 'high',
         timestamp: '03 Feb 2026',
-        type: 'general'
+        type: 'earthquake'
+    },
+    {
+        id: 6,
+        title: 'Tsunami Warning – Coastal Regions',
+        description: 'Tsunami advisory issued for coastal areas following undersea seismic activity. Move to higher ground immediately.',
+        severity: 'high',
+        timestamp: '01 Feb 2026',
+        type: 'tsunami'
+    },
+    {
+        id: 5,
+        title: 'Volcanic Activity – Mount Popa',
+        description: 'Increased volcanic activity detected at Mount Popa. Exclusion zone extended to 10 km radius.',
+        severity: 'high',
+        timestamp: '30 Jan 2026',
+        type: 'volcano'
+    },
+    {
+        id: 4,
+        title: 'Hurricane Alert – Bay of Bengal',
+        description: 'Category 2 hurricane approaching Bay of Bengal. Expected landfall within 48 hours. Prepare emergency kits.',
+        severity: 'high',
+        timestamp: '28 Jan 2026',
+        type: 'hurricane'
+    },
+    {
+        id: 3,
+        title: 'Storm Warning – Yangon Region',
+        description: 'Severe thunderstorm warning issued for Yangon Region. Strong winds and heavy rainfall expected.',
+        severity: 'moderate',
+        timestamp: '27 Jan 2026',
+        type: 'storm'
     },
     {
         id: 2,

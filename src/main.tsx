@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './styles/index.css';
 import App from './App';
+import './pwa-install'; // PWA install prompt handler
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

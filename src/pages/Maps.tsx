@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '../components/Icon';
 import { EarthquakeEvent, SafetyAsset, IncidentReport, Resource, User } from '../types';
 import { fetchEarthquakes, fetchSafetyAssets, fetchReports, fetchResources, fetchAllUsers, saveUser } from '../services/api';
+import { useLanguage } from '../contexts/LanguageContext';
 
 declare global {
   interface Window {
@@ -55,6 +56,7 @@ const MYANMAR_CENTER: [number, number] = [21.0, 96.0];
 const YANGON_OPS: [number, number] = [16.855, 96.195];
 
 const Maps: React.FC = () => {
+    const { t } = useLanguage();
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<any>(null);
     const markersRef = useRef<any[]>([]);
@@ -451,7 +453,7 @@ const Maps: React.FC = () => {
 
                 // Rich Popup Content
                 const popupContent = `
-                    <div style="min-width: 220px; font-family: 'Inter', sans-serif;">
+                    <div style="min-width: 160px; max-width: 90vw; font-family: 'Inter', sans-serif;">
                         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #f3f4f6; padding-bottom: 8px; margin-bottom: 8px;">
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <div style="width:10px; height:10px; border-radius:50%; background-color:${color};"></div>
@@ -523,7 +525,7 @@ const Maps: React.FC = () => {
                 ` : '';
 
                 const popupContent = `
-                    <div style="min-width: 220px; font-family: 'Inter', sans-serif;">
+                    <div style="min-width: 160px; max-width: 90vw; font-family: 'Inter', sans-serif;">
                         <div style="border-bottom: 1px solid #f3f4f6; padding-bottom: 8px; margin-bottom: 8px;">
                              <div style="font-weight: 800; font-size: 14px; margin-bottom: 2px; color:#111;">${r.name}</div>
                              <div style="font-size: 10px; font-weight: 700; color: ${color}; text-transform: uppercase; letter-spacing: 0.5px;">${r.type} Resource</div>
@@ -569,7 +571,7 @@ const Maps: React.FC = () => {
                     fillOpacity: 0.7
                 }).bindTooltip(`${mag.toFixed(1)} Mag - ${eq.properties.place}`, { direction: 'top' })
                 .bindPopup(`
-                    <div style="min-width:140px; font-family:'Inter',sans-serif;">
+                    <div style="min-width: 120px; max-width: 90vw; font-family:'Inter',sans-serif;">
                         <div style="border-bottom:1px solid #eee; padding-bottom:4px; margin-bottom:4px;">
                             <b style="font-size:16px; color:${color};">${mag.toFixed(1)}</b> <span style="font-size:10px; text-transform:uppercase; color:#888;">Magnitude</span>
                         </div>
@@ -768,7 +770,7 @@ const Maps: React.FC = () => {
                 const iconHtml = `<div style="width:40px;height:40px;background:white;border:2px solid ${o.color};border-radius:12px;display:flex;align-items:center;justify-content:center;color:${o.color};box-shadow:0 2px 8px rgba(0,0,0,0.15)"><span style="font-size:18px">${o.type === 'RENDEZVOUS' ? '📍' : o.type === 'EXTRACTION' ? '🚁' : '🏁'}</span></div>`;
                 const m = window.L.marker([o.lat, o.lng], {
                     icon: window.L.divIcon({ html: iconHtml, iconSize: [40, 40] })
-                }).bindPopup(`<div style="min-width:160px;padding:8px"><span style="font-size:9px;font-weight:700;background:${o.color}20;color:${o.color};padding:2px 6px;border-radius:4px">${o.type}</span><h4 style="margin:8px 0 4px;font-size:14px;font-weight:800">${o.title}</h4><p style="font-size:11px;color:#64748b">${o.details}</p></div>`)
+                }).bindPopup(`<div style="min-width:140px;max-width:90vw;padding:8px"><span style="font-size:9px;font-weight:700;background:${o.color}20;color:${o.color};padding:2px 6px;border-radius:4px">${o.type}</span><h4 style="margin:8px 0 4px;font-size:14px;font-weight:800">${o.title}</h4><p style="font-size:11px;color:#64748b">${o.details}</p></div>`)
                     .on('click', () => onSimEntityClick({ ...o, category: 'Objective' }, o.lat, o.lng)).addTo(mapInstance.current);
                 simMarkersRef.current.push(m);
             });
@@ -781,7 +783,7 @@ const Maps: React.FC = () => {
                 const iconHtml = `<div style="width:40px;height:40px;background:white;border:2px solid ${color};border-radius:12px;display:flex;align-items:center;justify-content:center;color:${color};box-shadow:0 2px 8px rgba(0,0,0,0.15)"><span style="font-size:18px">${s.type === 'HOSPITAL' ? '🏥' : '🏕️'}</span></div>`;
                 const m = window.L.marker([s.lat, s.lng], {
                     icon: window.L.divIcon({ html: iconHtml, iconSize: [40, 40] })
-                }).bindPopup(`<div style="min-width:180px;padding:8px"><span style="font-size:9px;font-weight:700;color:${color}">${s.type} Node</span><h4 style="margin:8px 0 0;font-size:14px;font-weight:800">${s.name}</h4></div>`)
+                }).bindPopup(`<div style="min-width:140px;max-width:90vw;padding:8px"><span style="font-size:9px;font-weight:700;color:${color}">${s.type} Node</span><h4 style="margin:8px 0 0;font-size:14px;font-weight:800">${s.name}</h4></div>`)
                     .on('click', () => onSimEntityClick({ ...s, category: 'Shelter' }, s.lat, s.lng)).addTo(mapInstance.current);
                 simMarkersRef.current.push(m);
             });
@@ -842,7 +844,7 @@ const Maps: React.FC = () => {
                 });
 
                 const popupContent = `
-                    <div style="min-width: 200px; font-family: 'Inter', sans-serif;">
+                    <div style="min-width: 160px; max-width: 90vw; font-family: 'Inter', sans-serif;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                             <div style="font-weight: 800; font-size: 14px;">${u.name}</div>
                             <span style="font-size:9px; font-weight:700; background:#dbeafe; color:#1e40af; padding:2px 6px; border-radius:10px;">${u.role}</span>
@@ -888,7 +890,7 @@ const Maps: React.FC = () => {
         if (userLoc && mapInstance.current) {
             mapInstance.current.setView([userLoc.lat, userLoc.lng], 16);
         } else {
-            window.alert("Waiting for GPS signal...");
+            window.alert(t('waitingForGpsSignal'));
         }
     };
 
@@ -965,9 +967,9 @@ const Maps: React.FC = () => {
 
             {/* Search Panel - same style as Layer Control */}
             {showSearchPanel && (
-                <div className="absolute top-20 right-4 z-[40] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 w-64 animate-in slide-in-from-right-4">
+                <div className="absolute top-20 right-3 left-3 sm:left-auto sm:right-4 z-[40] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 sm:w-72 animate-in slide-in-from-right-4">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xs font-bold text-gray-400 uppercase">Search</h3>
+                        <h3 className="text-xs font-bold text-gray-400 uppercase">{t('searchButton')}</h3>
                         <button onClick={() => setShowSearchPanel(false)} className="p-1 hover:bg-gray-100 rounded-full" aria-label="Close">
                             <Icons.X size={18} />
                         </button>
@@ -1018,7 +1020,7 @@ const Maps: React.FC = () => {
 
             {/* Layer Control Panel */}
             {showLayerControl && (
-                <div className="absolute top-20 right-4 z-[40] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 w-64 animate-in slide-in-from-right-4 overflow-y-auto max-h-[70vh]">
+                <div className="absolute top-20 right-3 left-3 sm:left-auto sm:right-4 z-[40] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 sm:w-72 animate-in slide-in-from-right-4 overflow-y-auto max-h-[70vh]">
                     
                     {/* Base Map Switcher */}
                     <div className="mb-6">
@@ -1128,9 +1130,9 @@ const Maps: React.FC = () => {
 
             {/* Earthquake List Drawer */}
             {showQuakeList && (
-                <div className="absolute top-20 right-4 bottom-24 z-[39] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 w-72 animate-in slide-in-from-right-4 flex flex-col">
+                <div className="absolute top-20 right-3 left-3 sm:left-auto sm:right-4 bottom-24 z-[39] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 sm:w-72 animate-in slide-in-from-right-4 flex flex-col">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold flex items-center gap-2"><Icons.Activity className="text-yellow-600"/> Seismic Events</h3>
+                        <h3 className="font-bold flex items-center gap-2"><Icons.Activity className="text-yellow-600"/> {t('seismicEvents')}</h3>
                         <button onClick={() => setShowQuakeList(false)} className="p-1 hover:bg-gray-100 rounded-full"><Icons.X size={16}/></button>
                     </div>
                     
@@ -1144,8 +1146,8 @@ const Maps: React.FC = () => {
                         />
                     </div>
                     <div className="flex bg-gray-100 p-1 rounded-lg mb-3 shrink-0">
-                        <button onClick={() => setQuakeSort('mag')} className={`flex-1 py-1 text-[10px] font-bold rounded ${quakeSort === 'mag' ? 'bg-white shadow' : 'text-gray-500'}`}>Magnitude</button>
-                        <button onClick={() => setQuakeSort('time')} className={`flex-1 py-1 text-[10px] font-bold rounded ${quakeSort === 'time' ? 'bg-white shadow' : 'text-gray-500'}`}>Recent</button>
+                        <button onClick={() => setQuakeSort('mag')} className={`flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded min-h-[36px] ${quakeSort === 'mag' ? 'bg-white shadow' : 'text-gray-500'}`}>{t('magnitude')}</button>
+                        <button onClick={() => setQuakeSort('time')} className={`flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded min-h-[36px] ${quakeSort === 'time' ? 'bg-white shadow' : 'text-gray-500'}`}>{t('recent')}</button>
                     </div>
 
                     <div className="overflow-y-auto flex-1 space-y-2 pr-1 custom-scrollbar">
@@ -1175,7 +1177,7 @@ const Maps: React.FC = () => {
                 {/* Tactical Simulation - Intelligence Card */}
             {selectedSimEntity && simPopupPos && (
                 <div
-                    className="absolute z-[100] pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-4 shadow-2xl border border-white/20 w-72 animate-in zoom-in-95"
+                    className="absolute z-[100] pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-4 shadow-2xl border border-white/20 w-[calc(100vw-2rem)] sm:w-72 max-w-[288px] animate-in zoom-in-95"
                     style={{ left: simPopupPos.x, top: simPopupPos.y - 12, transform: 'translate(-50%, -100%)' }}
                 >
                     <div className="flex justify-between items-start mb-3">
@@ -1213,7 +1215,7 @@ const Maps: React.FC = () => {
 
             {/* Item Details Modal (from Map Click) */}
             {selectedItem && (
-                 <div className="absolute bottom-0 left-0 right-0 z-[60] bg-white rounded-t-3xl shadow-[0_-5px_30px_rgba(0,0,0,0.2)] max-h-[60vh] flex flex-col animate-in slide-in-from-bottom-10">
+                 <div className="absolute bottom-0 left-0 right-0 z-[60] bg-white rounded-t-3xl shadow-[0_-5px_30px_rgba(0,0,0,0.2)] max-h-[70vh] sm:max-h-[60vh] flex flex-col animate-in slide-in-from-bottom-10">
                     <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-3xl">
                         <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-lg ${'name' in selectedItem ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
@@ -1222,7 +1224,7 @@ const Maps: React.FC = () => {
                             <div>
                                 <h2 className="font-bold text-lg leading-tight">{'name' in selectedItem ? (selectedItem as Resource).name : (selectedItem as IncidentReport).type}</h2>
                                 <p className="text-xs text-gray-500">
-                                    {'name' in selectedItem ? 'Resource' : 'Incident Report'} • #{selectedItem.id}
+                                    {'name' in selectedItem ? t('resourceLabel') : t('incidentReportLabel')} • #{selectedItem.id}
                                 </p>
                             </div>
                         </div>
@@ -1240,7 +1242,7 @@ const Maps: React.FC = () => {
                                  {(selectedItem as Resource).capacity && (
                                      <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                                         <div className="flex justify-between items-end mb-2">
-                                            <span className="text-xs font-bold text-gray-500 uppercase">Live Capacity</span>
+                                            <span className="text-xs font-bold text-gray-500 uppercase">{t('liveCapacity')}</span>
                                             <span className={`text-sm font-bold ${((selectedItem as Resource).occupancy || 0) / (selectedItem as Resource).capacity! > 0.9 ? 'text-red-600' : 'text-green-600'}`}>
                                                 {(selectedItem as Resource).occupancy} / {(selectedItem as Resource).capacity}
                                             </span>
@@ -1261,13 +1263,13 @@ const Maps: React.FC = () => {
                                  </div>
                                   {(selectedItem as Resource).specialInstructions && (
                                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                                         <h4 className="font-bold text-xs text-blue-600 uppercase mb-2">Instructions</h4>
+                                         <h4 className="font-bold text-xs text-blue-600 uppercase mb-2">{t('instructions')}</h4>
                                          <p className="text-sm text-gray-700">{(selectedItem as Resource).specialInstructions}</p>
                                      </div>
                                  )}
                                  {(selectedItem as Resource).notes && (
                                      <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100">
-                                         <h4 className="font-bold text-xs text-yellow-600 uppercase mb-2">Admin Notes</h4>
+                                         <h4 className="font-bold text-xs text-yellow-600 uppercase mb-2">{t('adminNotes')}</h4>
                                          <p className="text-sm text-gray-700">{(selectedItem as Resource).notes}</p>
                                      </div>
                                  )}
@@ -1278,27 +1280,27 @@ const Maps: React.FC = () => {
                                  <p className="text-gray-700 text-sm leading-relaxed">{(selectedItem as IncidentReport).description}</p>
                                  <div className="flex gap-2">
                                      <span className={`px-2 py-1 text-xs font-bold rounded uppercase ${(selectedItem as IncidentReport).urgency === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
-                                         Urgency: {(selectedItem as IncidentReport).urgency}
+                                         {t('urgencyLabel')}: {(selectedItem as IncidentReport).urgency}
                                      </span>
                                      <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded uppercase">
-                                         Status: {(selectedItem as IncidentReport).status}
+                                         {t('statusPrefix')}: {(selectedItem as IncidentReport).status}
                                      </span>
                                  </div>
                                  
-                                 <div className="grid grid-cols-2 gap-3 mt-4">
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                                      <div className="bg-gray-50 p-3 rounded-xl">
-                                         <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Department</div>
-                                         <div className="text-sm font-bold text-gray-800">{(selectedItem as IncidentReport).department || 'General'}</div>
+                                         <div className="text-[11px] sm:text-xs font-bold text-gray-400 uppercase mb-1">{t('incidentLocation')}</div>
+                                         <div className="text-sm font-bold text-gray-800">{(selectedItem as IncidentReport).department || t('notAvailable')}</div>
                                      </div>
                                      <div className="bg-gray-50 p-3 rounded-xl">
-                                         <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Reported Time</div>
+                                         <div className="text-[11px] sm:text-xs font-bold text-gray-400 uppercase mb-1">{t('reportedTime')}</div>
                                          <div className="text-sm font-bold text-gray-800">{(selectedItem as IncidentReport).timestamp}</div>
                                      </div>
                                  </div>
 
                                  {((selectedItem as IncidentReport).contactPerson || (selectedItem as IncidentReport).contactPhone) && (
                                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                                        <h4 className="font-bold text-xs text-blue-600 uppercase mb-2">Point of Contact</h4>
+                                        <h4 className="font-bold text-xs text-blue-600 uppercase mb-2">{t('pointOfContact')}</h4>
                                         {(selectedItem as IncidentReport).contactPerson && <div className="text-sm font-bold mb-1">{(selectedItem as IncidentReport).contactPerson}</div>}
                                         {(selectedItem as IncidentReport).contactPhone && <div className="text-sm text-gray-600">{(selectedItem as IncidentReport).contactPhone}</div>}
                                      </div>
@@ -1306,9 +1308,9 @@ const Maps: React.FC = () => {
 
                                  {(selectedItem as IncidentReport).structuralDamage && (selectedItem as IncidentReport).structuralDamage !== 'None' && (
                                      <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-                                         <h4 className="font-bold text-xs text-red-600 uppercase mb-1">Damage Assessment</h4>
+                                         <h4 className="font-bold text-xs text-red-600 uppercase mb-1">{t('damageAssessment')}</h4>
                                          <div className="text-sm text-gray-800 font-bold mb-1">{(selectedItem as IncidentReport).structuralDamage}</div>
-                                         <div className="text-xs text-gray-600">Est Cost: €{(selectedItem as IncidentReport).estCost} • Repair: {(selectedItem as IncidentReport).estRepairDays} days</div>
+                                         <div className="text-xs text-gray-600">{t('estCostPrefix')}: €{(selectedItem as IncidentReport).estCost} • {t('repairDaysPrefix')}: {(selectedItem as IncidentReport).estRepairDays} {t('daysUnit')}</div>
                                      </div>
                                  )}
                              </div>
@@ -1319,7 +1321,7 @@ const Maps: React.FC = () => {
                              rel="noreferrer"
                              className="mt-6 flex items-center justify-center gap-2 w-full py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 shadow-lg"
                          >
-                             <Icons.Navigation size={18} /> Get Directions
+                             <Icons.Navigation size={18} /> {t('getDirections')}
                          </a>
                     </div>
                  </div>

@@ -10,7 +10,7 @@ import { requestAccount, confirmAccount, getPendingRegistration, authenticate } 
 import { User } from '../types';
 
 interface LoginProps {
-    onLogin: (role: 'Admin' | 'Responder' | 'Viewer', user?: User) => void;
+    onLogin: (role: 'Admin' | 'Responder' | 'Viewer' | 'Reporter', user?: User) => void;
     theme: ThemeSettings;
 }
 
@@ -24,9 +24,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [pendingEmail, setPendingEmail] = useState('');
     
-    // Defaults for demo
-    const [email, setEmail] = useState('admin@safesphere.app');
-    const [password, setPassword] = useState('admin123');
+    // Defaults for demo — use Reporter (limited privileges) for safety
+    const [email, setEmail] = useState('reporter@safesphere.app');
+    const [password, setPassword] = useState('Reporter123!');
     
     // Registration form
     const [firstName, setFirstName] = useState('');
@@ -200,7 +200,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 </div>
                                 
                                 <div className="flex justify-between items-center text-xs">
-                                    <span className="text-gray-400">Demo: admin@safesphere.app / admin123</span>
+                                    <span className="text-gray-400">Demo: reporter@safesphere.app / Reporter123!</span>
                                     <button type="button" onClick={() => setShowForgotPassword(true)} className="font-bold text-blue-600 hover:text-blue-700">Forgot?</button>
                                 </div>
                                 {loginError && <p className="text-sm text-red-600">{loginError}</p>}

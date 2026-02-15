@@ -38,14 +38,22 @@ const Emergency: React.FC = () => {
         if (reports.length === 0) return [];
             const earthquake = reports.find(r => {
             const t = (r.type || '').toUpperCase();
-            return t.includes('EARTHQUAKE') || t.includes('FIRE') && !t.includes('FLOOD') || t.includes('STORM') || t.includes('TYPHOON');
+            return t.includes('EARTHQUAKE') || t.includes('FIRE') && !t.includes('FLOOD') || t.includes('STORM') || t.includes('TYPHOON') || t.includes('TSUNAMI') || t.includes('VOLCANO') || t.includes('HURRICANE');
         });
-        const storm = reports.find(r => {
+        const tsunami = reports.find(r => {
             const t = (r.type || '').toUpperCase();
-            return t.includes('STORM') || t.includes('TYPHOON');
+            return t.includes('TSUNAMI');
         });
-        return earthquake ? [earthquake] : storm ? [storm] : [reports[0]];  
-    }, [reports]);          
+        const volcano = reports.find(r => {
+            const t = (r.type || '').toUpperCase();
+            return t.includes('VOLCANO');
+        });
+        const hurricane = reports.find(r => {
+            const t = (r.type || '').toUpperCase();
+            return t.includes('HURRICANE');
+        });
+        return earthquake ? [earthquake] : tsunami ? [tsunami] : volcano ? [volcano] : hurricane ? [hurricane] : [reports[0]];  
+    }, [reports]);
 
     const loadData = () => {
         fetchAlerts().then(setAlerts);
@@ -132,7 +140,7 @@ const Emergency: React.FC = () => {
     }
 
     return (
-        <div className="flex flex-col pb-24 p-4 min-h-screen relative">
+        <div className="flex flex-col pb-24 p-4 sm:p-5 md:p-6 min-h-screen relative">
              <div className="flex flex-col items-center text-center mb-8 mt-4">
                 <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500 mb-4">
                     <Icons.Emergency size={32} />
@@ -228,11 +236,18 @@ const Emergency: React.FC = () => {
                                 onClick={() => setSelectedAlert(alert)}
                                 className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden cursor-pointer hover:border-red-300 transition-colors"
                             >
-                                {/* Severity Tag */}
+                                {/* Severity + Type Tag */}
                                 <div className={`absolute top-4 left-4 text-[10px] font-bold px-2 py-1 rounded uppercase ${
+                                    alert.type === 'tsunami' ? 'bg-cyan-100 text-cyan-700' :
+                                    alert.type === 'volcano' ? 'bg-red-100 text-red-700' :
+                                    alert.type === 'hurricane' ? 'bg-violet-100 text-violet-700' :
+                                    alert.type === 'storm' ? 'bg-indigo-100 text-indigo-700' :
+                                    alert.type === 'earthquake' ? 'bg-amber-100 text-amber-700' :
+                                    alert.type === 'flood' ? 'bg-blue-100 text-blue-700' :
+                                    alert.type === 'fire' ? 'bg-orange-100 text-orange-700' :
                                     alert.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
                                 }`}>
-                                    {alert.severity === 'high' ? t('highSeverity') : alert.severity === 'critical' ? t('criticalSeverity') : alert.severity === 'low' ? t('lowSeverity') : t('moderateSeverity')}
+                                    {alert.type !== 'general' && alert.type !== 'heat' ? t(alert.type) : (alert.severity === 'high' ? t('highSeverity') : alert.severity === 'critical' ? t('criticalSeverity') : alert.severity === 'low' ? t('lowSeverity') : t('moderateSeverity'))}
                                 </div>
                                 <div className="flex justify-end mb-6">
                                     <span className="text-xs text-gray-500">{alert.timestamp}</span>
@@ -315,9 +330,20 @@ const Emergency: React.FC = () => {
                         
                         <div className="flex flex-col items-center mb-6 text-center">
                             <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
+                                selectedAlert.type === 'tsunami' ? 'bg-cyan-100 text-cyan-700' :
+                                selectedAlert.type === 'volcano' ? 'bg-red-100 text-red-700' :
+                                selectedAlert.type === 'hurricane' ? 'bg-violet-100 text-violet-700' :
+                                selectedAlert.type === 'storm' ? 'bg-indigo-100 text-indigo-700' :
+                                selectedAlert.type === 'earthquake' ? 'bg-amber-100 text-amber-700' :
+                                selectedAlert.type === 'flood' ? 'bg-blue-100 text-blue-700' :
+                                selectedAlert.type === 'fire' ? 'bg-orange-100 text-orange-700' :
                                 selectedAlert.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
                             }`}>
-                                <Icons.Emergency size={32} />
+                                {['earthquake', 'tsunami', 'volcano', 'hurricane', 'storm', 'flood'].includes(selectedAlert.type) ? (
+                                    <Icons.AlertTriangle size={32} />
+                                ) : (
+                                    <Icons.Emergency size={32} />
+                                )}
                             </div>
                             <h2 className="text-xl font-bold mb-1">{translateAlertTitle(selectedAlert.title)}</h2>
                             <span className="text-xs text-gray-500 font-mono">{selectedAlert.timestamp}</span>
@@ -328,12 +354,12 @@ const Emergency: React.FC = () => {
                         </div>
 
                         <div className="flex gap-2">
-                             <button onClick={() => setSelectedAlert(null)} className="flex-1 py-3 bg-black text-white rounded-xl font-bold text-sm">Acknowledge</button>
+                             <button onClick={() => setSelectedAlert(null)} className="flex-1 py-3 bg-black text-white rounded-xl font-bold text-sm">{t('acknowledge')}</button>
                              <button 
                                 onClick={() => { setSelectedAlert(null); setViewMode('map'); }}
                                 className="flex-1 py-3 bg-gray-100 text-gray-800 rounded-xl font-bold text-sm hover:bg-gray-200"
                             >
-                                View Map
+                                {t('viewMap')}
                             </button>
                         </div>
                     </div>
@@ -345,7 +371,7 @@ const Emergency: React.FC = () => {
                 <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white w-full h-[80vh] sm:h-auto sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col relative animate-in slide-in-from-bottom-10">
                          <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
-                            <h3 className="font-bold">Report Details #{selectedReport.id}</h3>
+                            <h3 className="font-bold">{t('reportDetails')} #{selectedReport.id}</h3>
                             <button onClick={() => setSelectedReport(null)} className="p-2 hover:bg-gray-200 rounded-full">
                                 <Icons.X size={20} />
                             </button>
@@ -368,7 +394,7 @@ const Emergency: React.FC = () => {
 
                             {selectedReport.lat != null && selectedReport.lng != null && typeof window !== 'undefined' && window.L && (
                                 <div className="mb-4 rounded-xl overflow-hidden border border-gray-200">
-                                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">Incident Location</p>
+                                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('incidentLocationLabel')}</p>
                                     <div className="h-40 w-full">
                                         <IncidentMap reports={[selectedReport]} centerLat={selectedReport.lat} centerLng={selectedReport.lng} />
                                     </div>
@@ -376,20 +402,20 @@ const Emergency: React.FC = () => {
                             )}
                             <div className="space-y-3 text-sm">
                                 <div className="flex justify-between border-b pb-2">
-                                    <span className="text-gray-500">Status</span>
+                                    <span className="text-gray-500">{t('status')}</span>
                                     <span className="font-bold capitalize">{selectedReport.status}</span>
                                 </div>
                                 <div className="flex justify-between border-b pb-2">
-                                    <span className="text-gray-500">Urgency</span>
-                                    <span className="font-bold">{selectedReport.urgency || 'N/A'}</span>
+                                    <span className="text-gray-500">{t('urgencyLabel')}</span>
+                                    <span className="font-bold">{selectedReport.urgency || t('notAvailable')}</span>
                                 </div>
                                 <div className="flex justify-between border-b pb-2">
-                                    <span className="text-gray-500">Department</span>
-                                    <span className="font-bold">{selectedReport.department || 'General'}</span>
+                                    <span className="text-gray-500">{t('incidentLocation')}</span>
+                                    <span className="font-bold">{selectedReport.department || t('notAvailable')}</span>
                                 </div>
                                 {selectedReport.adminNotes && (
                                     <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mt-4">
-                                        <span className="block text-xs font-bold text-yellow-700 uppercase mb-1">Admin Response</span>
+                                        <span className="block text-xs font-bold text-yellow-700 uppercase mb-1">{t('adminResponse')}</span>
                                         <p className="text-gray-800">{selectedReport.adminNotes}</p>
                                     </div>
                                 )}
@@ -397,7 +423,7 @@ const Emergency: React.FC = () => {
                         </div>
 
                         <div className="p-4 border-t bg-gray-50 rounded-b-2xl">
-                            <button onClick={() => setSelectedReport(null)} className="w-full py-3 bg-black text-white rounded-xl font-bold">Close Details</button>
+                            <button onClick={() => setSelectedReport(null)} className="w-full py-3 bg-black text-white rounded-xl font-bold">{t('closeDetails')}</button>
                         </div>
                     </div>
                 </div>

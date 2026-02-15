@@ -43,6 +43,31 @@ body.login-page-active {
 }
 .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px)); }
 .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+/* Content above BottomNav: nav-height + safe area for iPhone home indicator */
+:root { --nav-height: 5rem; }
+@media (min-width: 640px) { :root { --nav-height: 5.5rem; } }
+.pb-content-nav { padding-bottom: calc(var(--nav-height) + 3rem + env(safe-area-inset-bottom, 0px)); }
+
+/* Responsive touch-target enforcement for interactive elements on mobile */
+@media (pointer: coarse) {
+  button, [role="button"], a, select, input[type="checkbox"], input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="search"],
+  input[type="password"], input[type="url"], input[type="date"], textarea, select {
+    min-height: 44px;
+    font-size: max(16px, 1em); /* Prevents zoom on focus in iOS Safari */
+  }
+}
+
+/* Fluid typography for better readability across devices */
+@media (min-width: 640px) {
+  html { font-size: 16px; }
+}
+@media (min-width: 1024px) {
+  html { font-size: 17px; }
+}
 
 /* Custom Utilities */
 .no-scrollbar::-webkit-scrollbar {

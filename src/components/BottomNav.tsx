@@ -25,7 +25,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
             role="navigation"
             aria-label="Main navigation"
         >
-            <div className="w-full max-w-lg sm:mb-4">
+            <div className="w-full max-w-full sm:max-w-lg md:max-w-2xl lg:max-w-3xl xl:max-w-4xl sm:mb-4">
                 <div className="flex justify-between items-stretch gap-0.5 sm:gap-1 px-1 sm:px-3 py-2 sm:py-2.5 rounded-t-2xl sm:rounded-2xl bg-white/50 sm:bg-white/45 backdrop-blur-md border border-gray-200/60 sm:border-gray-200/50 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] sm:shadow-xl">
                     {navItems.map((item) => {
                         const isActive = activeTab === item.id;

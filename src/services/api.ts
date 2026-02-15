@@ -48,7 +48,7 @@ const RESOURCES_CACHE_KEY = 'safesphere_resources_v3_peoples_park'; // Bumped: C
 export const DEMO_CREDENTIALS: Array<{ email: string; password: string; user: User }> = [
     { email: 'admin@safesphere.app', password: 'admin123', user: { id: 1, name: 'Admin', role: 'Admin', safetyScore: 85, xp: 450, email: 'admin@safesphere.app', phone: '+1 555 0123', skills: ['Leadership', 'First Aid'], bloodType: 'O+', volunteerPoints: 120, permissions: ['approve_reports', 'manage_users', 'edit_resources'] } },
     { email: 'responder@safesphere.app', password: 'responder123', user: { id: 2, name: 'Responder', role: 'Responder', safetyScore: 90, xp: 1200, email: 'responder@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, permissions: ['approve_reports'] } },
-    { email: 'reporter@safesphere.app', password: 'reporter123', user: { id: 3, name: 'Reporter', role: 'Reporter', safetyScore: 75, xp: 300, email: 'reporter@safesphere.app', skills: ['Driving'], bloodType: 'B+', volunteerPoints: 85, permissions: [] } },
+    { email: 'reporter@safesphere.app', password: 'Reporter123!', user: { id: 3, name: 'Reporter', role: 'Reporter', safetyScore: 75, xp: 300, email: 'reporter@safesphere.app', skills: ['Driving'], bloodType: 'B+', volunteerPoints: 85, permissions: [] } },
     { email: 'viewer@safesphere.app', password: 'viewer123', user: { id: 4, name: 'Viewer', role: 'Viewer', safetyScore: 50, xp: 100, email: 'viewer@safesphere.app', bloodType: 'A+', volunteerPoints: 20, permissions: [] } }
 ];
 
@@ -280,7 +280,7 @@ export const getPendingRegistration = (email: string): PendingRegistration | nul
 
 // --- ALERTS ---
 
-const ALERTS_CACHE_KEY = 'safesphere_alerts';
+const ALERTS_CACHE_KEY = 'safesphere_alerts_v2'; // Bumped: added tsunami, volcano, hurricane, storm types
 
 export const fetchAlerts = async (): Promise<Alert[]> => {
     if (useSupabase() && supabase) {
@@ -852,7 +852,8 @@ export const deleteInjuryCase = async (id: number): Promise<boolean> => {
 const USGS_FEED_URLS: Record<string, string> = {
     '24h': 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
     '7d': 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson',
-    '1M': 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.geojson'
+    '1M': 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.geojson',
+    '1Y': 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_year.geojson'
 };
 
 /** Cache TTL in ms – refresh live data every 2 minutes */
