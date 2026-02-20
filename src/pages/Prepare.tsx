@@ -12,6 +12,9 @@ const CHECKLIST_KEY_MAP: Record<number, string> = {
     12: 'checklistTsunamiRoute', 13: 'checklistGoBag', 14: 'checklistFireExtinguisher',
     15: 'checklistMeetingPoint',
 };
+const LEARN_KEY_MAP: Record<number, { title: string; desc: string }> = {
+    1: { title: 'communityEmergencyGuide', desc: 'localProcedures' },
+};
 const DRILL_KEY_MAP: Record<number, string> = {
     1: 'drillAnnualFire', 2: 'drillEarthquake', 3: 'drillActiveShooter',
 };
@@ -388,8 +391,8 @@ const Prepare: React.FC<PrepareProps> = ({ onNavigate }) => {
                                              <Icons.BookOpen size={20} className="text-blue-600" />}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="font-semibold text-gray-900">{item.title}</h4>
-                                            <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">{item.description}</p>
+                                            <h4 className="font-semibold text-gray-900">{LEARN_KEY_MAP[item.id] ? t(LEARN_KEY_MAP[item.id].title) : item.title}</h4>
+                                            <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">{LEARN_KEY_MAP[item.id] ? t(LEARN_KEY_MAP[item.id].desc) : item.description}</p>
                                             {item.url && (
                                                 <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-blue-600 hover:text-blue-700">
                                                     {t('readMore')} <Icons.ChevronRight size={14} className="shrink-0" />

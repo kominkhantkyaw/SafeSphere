@@ -15,6 +15,11 @@ const DESC_KEYS: Record<string, string> = {
     'Building Fire': 'buildingFire',
     'Vehicle Fire': 'vehicleFire',
     'Other': 'other',
+    'A magnitude ~5.9–6.0 earthquake struck Myanmar recently (reported Tuesday, 03. Feb 2026).': 'descEarthquakeMyanmar',
+    'Tsunami advisory issued for coastal areas following undersea seismic activity. Move to higher ground immediately.': 'descTsunamiCoastal',
+    'Increased volcanic activity detected at Mount Popa. Exclusion zone extended to 10 km radius.': 'descVolcanicMountPopa',
+    'Category 2 hurricane approaching Bay of Bengal. Expected landfall within 48 hours. Prepare emergency kits.': 'descHurricaneBayBengal',
+    'Severe thunderstorm warning issued for Yangon Region. Strong winds and heavy rainfall expected.': 'descStormYangon',
 };
 const REPORT_TYPE_KEYS: Record<string, string> = {
     FLOOD: 'floodType',
@@ -49,6 +54,11 @@ const ALERT_TITLE_KEYS: Record<string, string> = {
     'Emergency': 'emergency',
     'Power Outage': 'powerOutage',
     'Hazardous Spill': 'hazardousSpill',
+    'Earthquake – Myanmar': 'alertEarthquakeMyanmar',
+    'Tsunami Warning – Coastal Regions': 'alertTsunamiCoastal',
+    'Volcanic Activity – Mount Popa': 'alertVolcanicMountPopa',
+    'Hurricane Alert – Bay of Bengal': 'alertHurricaneBayBengal',
+    'Storm Warning – Yangon Region': 'alertStormYangon',
 };
 
 interface LanguageContextType {
@@ -1124,6 +1134,35 @@ const translations = {
         downloadButton: 'Download',
         communityEmergencyGuide: 'Community Emergency Guide',
         localProcedures: 'Local procedures for neighbourhood emergencies.',
+        // Alert titles (MOCK_ALERTS)
+        alertEarthquakeMyanmar: 'Earthquake – Myanmar',
+        alertTsunamiCoastal: 'Tsunami Warning – Coastal Regions',
+        alertVolcanicMountPopa: 'Volcanic Activity – Mount Popa',
+        alertHurricaneBayBengal: 'Hurricane Alert – Bay of Bengal',
+        alertStormYangon: 'Storm Warning – Yangon Region',
+        // Alert descriptions
+        descEarthquakeMyanmar: 'A magnitude ~5.9–6.0 earthquake struck Myanmar recently (reported Tuesday, 03. Feb 2026).',
+        descTsunamiCoastal: 'Tsunami advisory issued for coastal areas following undersea seismic activity. Move to higher ground immediately.',
+        descVolcanicMountPopa: 'Increased volcanic activity detected at Mount Popa. Exclusion zone extended to 10 km radius.',
+        descHurricaneBayBengal: 'Category 2 hurricane approaching Bay of Bengal. Expected landfall within 48 hours. Prepare emergency kits.',
+        descStormYangon: 'Severe thunderstorm warning issued for Yangon Region. Strong winds and heavy rainfall expected.',
+        // Chat messages
+        chatLastMsgReviewed: 'Your incident report has been reviewed',
+        chatLastMsgDrill: 'New safety drill scheduled for tomorrow',
+        chatLastMsgHelp: 'How can we help you today?',
+        chatLastMsgCooperation: 'Thank you for your cooperation',
+        chatLastMsgAi247: 'I\'m here 24/7 for disaster preparedness advice.',
+        you: 'You',
+        chatMsgReceivedReport: 'Hello! We received your incident report.',
+        chatMsgReportedFlood: 'Yes, I reported a flood warning in my area.',
+        chatMsgTeamReviewing: 'Thank you for the information. Our team is reviewing the situation and will update you shortly.',
+        chatMsgHowLong: 'How long will the review take?',
+        chatMsgReportApproved: 'Your incident report has been reviewed and approved. Emergency services have been notified.',
+        chatMsgWelcomeCommunity: 'Welcome to the Community Safety Group. How can we help?',
+        chatMsgDrillScheduled: 'New safety drill scheduled for tomorrow at 2 PM.',
+        chatMsgAdminHelp: 'Hello! How can we help you today?',
+        chatMsgRespondersCooperation: 'Thank you for your cooperation. We\'re here 24/7.',
+        chatMsgAiIntro: 'Hello! I\'m your AI Safety Assistant. I can help with disaster preparedness, earthquake and flood safety, emergency kits, and more. Ask me anything.',
     },
     de: {
         // Navigation
@@ -2182,6 +2221,35 @@ const translations = {
         downloadButton: 'Herunterladen',
         communityEmergencyGuide: 'Notfall-Leitfaden der Gemeinde',
         localProcedures: 'Lokale Verfahren für Notfälle in der Nachbarschaft.',
+        // Alert titles
+        alertEarthquakeMyanmar: 'Erdbeben – Myanmar',
+        alertTsunamiCoastal: 'Tsunami-Warnung – Küstenregionen',
+        alertVolcanicMountPopa: 'Vulkanische Aktivität – Mount Popa',
+        alertHurricaneBayBengal: 'Hurrikan-Alarm – Golf von Bengalen',
+        alertStormYangon: 'Sturmwarnung – Region Yangon',
+        // Alert descriptions
+        descEarthquakeMyanmar: 'Ein Erdbeben der Stärke ~5,9–6,0 hat kürzlich Myanmar getroffen (gemeldet Dienstag, 03. Feb 2026).',
+        descTsunamiCoastal: 'Tsunami-Warnung für Küstengebiete nach unterseeischer seismischer Aktivität. Begeben Sie sich sofort auf höher gelegenes Gelände.',
+        descVolcanicMountPopa: 'Erhöhte vulkanische Aktivität am Mount Popa festgestellt. Sperrzone auf 10 km Radius erweitert.',
+        descHurricaneBayBengal: 'Hurrikan der Kategorie 2 nähert sich dem Golf von Bengalen. Erwartetes Auftreffen innerhalb von 48 Stunden. Bereiten Sie Notfallsets vor.',
+        descStormYangon: 'Schwere Gewitterwarnung für die Region Yangon. Starke Winde und heftiger Regen erwartet.',
+        // Chat messages
+        chatLastMsgReviewed: 'Ihr Vorfallbericht wurde überprüft',
+        chatLastMsgDrill: 'Neue Sicherheitsübung für morgen geplant',
+        chatLastMsgHelp: 'Wie können wir Ihnen heute helfen?',
+        chatLastMsgCooperation: 'Vielen Dank für Ihre Zusammenarbeit',
+        chatLastMsgAi247: 'Ich bin rund um die Uhr für Katastrophenvorsorge-Beratung erreichbar.',
+        you: 'Sie',
+        chatMsgReceivedReport: 'Hallo! Wir haben Ihren Vorfallbericht erhalten.',
+        chatMsgReportedFlood: 'Ja, ich habe eine Hochwasserwarnung in meiner Gegend gemeldet.',
+        chatMsgTeamReviewing: 'Vielen Dank für die Informationen. Unser Team überprüft die Situation und wird Sie in Kürze informieren.',
+        chatMsgHowLong: 'Wie lange wird die Überprüfung dauern?',
+        chatMsgReportApproved: 'Ihr Vorfallbericht wurde überprüft und genehmigt. Rettungsdienste wurden benachrichtigt.',
+        chatMsgWelcomeCommunity: 'Willkommen in der Gemeinschafts-Sicherheitsgruppe. Wie können wir helfen?',
+        chatMsgDrillScheduled: 'Neue Sicherheitsübung für morgen um 14 Uhr geplant.',
+        chatMsgAdminHelp: 'Hallo! Wie können wir Ihnen heute helfen?',
+        chatMsgRespondersCooperation: 'Vielen Dank für Ihre Zusammenarbeit. Wir sind rund um die Uhr erreichbar.',
+        chatMsgAiIntro: 'Hallo! Ich bin Ihr KI-Sicherheitsassistent. Ich kann bei Katastrophenvorsorge, Erdbeben- und Hochwassersicherheit, Notfallsets und mehr helfen. Fragen Sie mich einfach.',
     },
     my: {
         // Navigation
@@ -3214,6 +3282,35 @@ const translations = {
         downloadButton: 'ဒေါင်းလုဒ်လုပ်ရန်',
         communityEmergencyGuide: 'ရပ်ရွာအရေးပေါ်လမ်းညွှန်',
         localProcedures: 'အိမ်နီးနားချင်း အရေးပေါ်အခြေအနေများအတွက် ဒေသတွင်း လုပ်ထုံးလုပ်နည်းများ။',
+        // Alert titles
+        alertEarthquakeMyanmar: 'မြေငလျင် – မြန်မာ',
+        alertTsunamiCoastal: 'ဆူနာမီ သတိပေးချက် – ကမ်းရိုးတန်းဒေသများ',
+        alertVolcanicMountPopa: 'မီးတောင်လှုပ်ရှားမှု – ပုပ္ပါးတောင်',
+        alertHurricaneBayBengal: 'ဟာရီကိန်း သတိပေးချက် – ဘင်္ဂလားပင်လယ်အော်',
+        alertStormYangon: 'မုန်တိုင်း သတိပေးချက် – ရန်ကုန်တိုင်းဒေသကြီး',
+        // Alert descriptions
+        descEarthquakeMyanmar: 'မကြာသေးမီက မြန်မာနိုင်ငံတွင် ပြင်းအား ~၅.၉–၆.၀ ရှိ မြေငလျင် လှုပ်ခဲ့သည် (အင်္ဂါနေ့ ၀၃ ဖေဖော်ဝါရီ ၂၀၂၆ တွင် သတင်းပို့)။',
+        descTsunamiCoastal: 'ရေအောက် မြေငလျင်လှုပ်ရှားမှုကြောင့် ကမ်းရိုးတန်းဒေသများအတွက် ဆူနာမီ သတိပေးချက် ထုတ်ပြန်ထားသည်။ ချက်ချင်း မြင့်ရာသို့ ရွှေ့ပါ။',
+        descVolcanicMountPopa: 'ပုပ္ပါးတောင်တွင် မီးတောင်လှုပ်ရှားမှု မြင့်တက်လာသည်ကို ထောက်လှမ်းတွေ့ရှိသည်။ တားမြစ်ဇုန်ကို ကီလိုမီတာ ၁၀ အချင်းဝက်သို့ တိုးချဲ့ပြီး။',
+        descHurricaneBayBengal: 'အဆင့် ၂ ဟာရီကိန်း ဘင်္ဂလားပင်လယ်အော်သို့ ချဉ်းကပ်နေသည်။ ၄၈ နာရီအတွင်း ကုန်းတွင်းသို့ ဝင်ရောက်ရန် မျှော်မှန်းထားသည်။ အရေးပေါ်ပစ္စည်းများ ပြင်ဆင်ပါ။',
+        descStormYangon: 'ရန်ကုန်တိုင်းဒေသကြီးအတွက် ပြင်းထန်သော မိုးကြိုးမုန်တိုင်း သတိပေးချက် ထုတ်ပြန်ထားသည်။ ပြင်းထန်သော လေနှင့် မိုးသည်းထန်စွာ ရွာရန် မျှော်မှန်းထားသည်။',
+        // Chat messages
+        chatLastMsgReviewed: 'သင့်ဖြစ်ရပ် သတင်းပို့ချက်ကို စစ်ဆေးပြီးပါပြီ',
+        chatLastMsgDrill: 'မနက်ဖြန်အတွက် လုံခြုံရေးလေ့ကျင့်ခန်းအသစ် စီစဉ်ထားပါသည်',
+        chatLastMsgHelp: 'ယနေ့ ကျွန်ုပ်တို့ မည်သို့ ကူညီနိုင်ပါသလဲ?',
+        chatLastMsgCooperation: 'သင့်ပူးပေါင်းဆောင်ရွက်မှုအတွက် ကျေးဇူးတင်ပါသည်',
+        chatLastMsgAi247: 'ဘေးအန္တရာယ် ကြိုတင်ပြင်ဆင်မှု အကြံဉာဏ်အတွက် ၂၄/၇ အသင့်ရှိပါသည်။',
+        you: 'သင်',
+        chatMsgReceivedReport: 'မင်္ဂလာပါ! သင့်ဖြစ်ရပ် သတင်းပို့ချက်ကို ကျွန်ုပ်တို့ လက်ခံရရှိပါပြီ။',
+        chatMsgReportedFlood: 'ဟုတ်ကဲ့၊ ကျွန်တော်/ကျွန်မ ဒေသတွင် ရေကြီးမှု သတိပေးချက် သတင်းပို့ခဲ့ပါသည်။',
+        chatMsgTeamReviewing: 'သတင်းအချက်အလက်အတွက် ကျေးဇူးတင်ပါသည်။ ကျွန်ုပ်တို့အဖွဲ့က အခြေအနေကို စစ်ဆေးနေပြီး မကြာမီ အသိပေးပါမည်။',
+        chatMsgHowLong: 'စစ်ဆေးမှု မည်မျှ ကြာမည်နည်း?',
+        chatMsgReportApproved: 'သင့်ဖြစ်ရပ် သတင်းပို့ချက်ကို စစ်ဆေးပြီး အတည်ပြုပါပြီ။ အရေးပေါ်ဝန်ဆောင်မှုများကို အကြောင်းကြားပြီးပါပြီ။',
+        chatMsgWelcomeCommunity: 'ရပ်ရွာလုံခြုံရေးအဖွဲ့မှ ကြိုဆိုပါသည်။ ကျွန်ုပ်တို့ မည်သို့ ကူညီနိုင်ပါသလဲ?',
+        chatMsgDrillScheduled: 'မနက်ဖြန် နေ့လည် ၂ နာရီတွင် လုံခြုံရေးလေ့ကျင့်ခန်းအသစ် စီစဉ်ထားပါသည်။',
+        chatMsgAdminHelp: 'မင်္ဂလာပါ! ယနေ့ ကျွန်ုပ်တို့ မည်သို့ ကူညီနိုင်ပါသလဲ?',
+        chatMsgRespondersCooperation: 'သင့်ပူးပေါင်းဆောင်ရွက်မှုအတွက် ကျေးဇူးတင်ပါသည်။ ကျွန်ုပ်တို့ ၂၄/၇ အသင့်ရှိပါသည်။',
+        chatMsgAiIntro: 'မင်္ဂလာပါ! ကျွန်ုပ်သည် သင့် AI လုံခြုံရေး အကူအညီပေးသူ ဖြစ်ပါသည်။ ဘေးအန္တရာယ် ကြိုတင်ပြင်ဆင်မှု၊ မြေငလျင်နှင့် ရေကြီးမှု လုံခြုံရေး၊ အရေးပေါ်ပစ္စည်းများ နှင့် အခြားများစွာကို ကူညီနိုင်ပါသည်။ ဘာမဆို မေးပါ။',
     }
 };
 

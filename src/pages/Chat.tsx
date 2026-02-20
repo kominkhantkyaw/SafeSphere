@@ -78,34 +78,34 @@ const Chat: React.FC = () => {
 
     // Demo conversations - nameKey for translation. AI Safety Assistant is always available when responders are offline.
     const [conversations] = useState<Conversation[]>([
-        { id: 1, name: 'Emergency Response Team', nameKey: 'emergencyResponseTeam', lastMessage: 'Your incident report has been reviewed', timestamp: '2 min ago', unread: 2, online: true },
-        { id: 2, name: 'Community Safety Group', nameKey: 'communitySafetyGroup', lastMessage: 'New safety drill scheduled for tomorrow', timestamp: '1 hour ago', unread: 0, online: true },
-        { id: 3, name: 'Admin Support', nameKey: 'adminSupport', lastMessage: 'How can we help you today?', timestamp: '3 hours ago', unread: 0, online: false },
-        { id: 4, name: 'Local Responders', nameKey: 'localResponders', lastMessage: 'Thank you for your cooperation', timestamp: 'Yesterday', unread: 0, online: false },
-        { id: 5, name: 'AI Safety Assistant', nameKey: 'aiSafetyAssistant', lastMessage: 'I\'m here 24/7 for disaster preparedness advice.', timestamp: 'Now', unread: 0, online: true, isAi: true }
+        { id: 1, name: 'Emergency Response Team', nameKey: 'emergencyResponseTeam', lastMessage: t('chatLastMsgReviewed'), timestamp: '2 min ago', unread: 2, online: true },
+        { id: 2, name: 'Community Safety Group', nameKey: 'communitySafetyGroup', lastMessage: t('chatLastMsgDrill'), timestamp: '1 hour ago', unread: 0, online: true },
+        { id: 3, name: 'Admin Support', nameKey: 'adminSupport', lastMessage: t('chatLastMsgHelp'), timestamp: '3 hours ago', unread: 0, online: false },
+        { id: 4, name: 'Local Responders', nameKey: 'localResponders', lastMessage: t('chatLastMsgCooperation'), timestamp: 'Yesterday', unread: 0, online: false },
+        { id: 5, name: 'AI Safety Assistant', nameKey: 'aiSafetyAssistant', lastMessage: t('chatLastMsgAi247'), timestamp: 'Now', unread: 0, online: true, isAi: true }
     ]);
 
     // Messages stored per conversation - each channel has its own encrypted thread
     const defaultMessages: Record<number, Message[]> = {
         1: [
-            { id: 101, sender: 'Emergency Response Team', content: 'Hello! We received your incident report.', timestamp: '10:30 AM', isOwn: false },
-            { id: 102, sender: 'You', content: 'Yes, I reported a flood warning in my area.', timestamp: '10:32 AM', isOwn: true },
-            { id: 103, sender: 'Emergency Response Team', content: 'Thank you for the information. Our team is reviewing the situation and will update you shortly.', timestamp: '10:35 AM', isOwn: false },
-            { id: 104, sender: 'You', content: 'How long will the review take?', timestamp: '10:36 AM', isOwn: true },
-            { id: 105, sender: 'Emergency Response Team', content: 'Your incident report has been reviewed and approved. Emergency services have been notified.', timestamp: '10:45 AM', isOwn: false }
+            { id: 101, sender: t('emergencyResponseTeam'), content: t('chatMsgReceivedReport'), timestamp: '10:30 AM', isOwn: false },
+            { id: 102, sender: t('you'), content: t('chatMsgReportedFlood'), timestamp: '10:32 AM', isOwn: true },
+            { id: 103, sender: t('emergencyResponseTeam'), content: t('chatMsgTeamReviewing'), timestamp: '10:35 AM', isOwn: false },
+            { id: 104, sender: t('you'), content: t('chatMsgHowLong'), timestamp: '10:36 AM', isOwn: true },
+            { id: 105, sender: t('emergencyResponseTeam'), content: t('chatMsgReportApproved'), timestamp: '10:45 AM', isOwn: false }
         ],
         2: [
-            { id: 201, sender: 'Community Safety Group', content: 'Welcome to the Community Safety Group. How can we help?', timestamp: '9:00 AM', isOwn: false },
-            { id: 202, sender: 'Community Safety Group', content: 'New safety drill scheduled for tomorrow at 2 PM.', timestamp: '9:05 AM', isOwn: false }
+            { id: 201, sender: t('communitySafetyGroup'), content: t('chatMsgWelcomeCommunity'), timestamp: '9:00 AM', isOwn: false },
+            { id: 202, sender: t('communitySafetyGroup'), content: t('chatMsgDrillScheduled'), timestamp: '9:05 AM', isOwn: false }
         ],
         3: [
-            { id: 301, sender: 'Admin Support', content: 'Hello! How can we help you today?', timestamp: '11:00 AM', isOwn: false }
+            { id: 301, sender: t('adminSupport'), content: t('chatMsgAdminHelp'), timestamp: '11:00 AM', isOwn: false }
         ],
         4: [
-            { id: 401, sender: 'Local Responders', content: 'Thank you for your cooperation. We\'re here 24/7.', timestamp: 'Yesterday', isOwn: false }
+            { id: 401, sender: t('localResponders'), content: t('chatMsgRespondersCooperation'), timestamp: 'Yesterday', isOwn: false }
         ],
         5: [
-            { id: 501, sender: 'AI Safety Assistant', content: 'Hello! I\'m your AI Safety Assistant. I can help with disaster preparedness, earthquake and flood safety, emergency kits, and more. Ask me anything.', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false }
+            { id: 501, sender: t('aiSafetyAssistant'), content: t('chatMsgAiIntro'), timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false }
         ]
     };
 
