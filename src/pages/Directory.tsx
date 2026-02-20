@@ -130,7 +130,7 @@ const Directory: React.FC<DirectoryProps> = ({ onBack }) => {
 
     const handleAddContact = () => {
         if (!newContact.name || !newContact.email || !newContact.phone) {
-            alert('Please fill in all required fields (Name, Email, Phone)');
+            alert(t('fillRequiredFieldsDirectory'));
             return;
         }
 
@@ -174,12 +174,12 @@ const Directory: React.FC<DirectoryProps> = ({ onBack }) => {
         });
 
     const handleShare = (contact: Contact) => {
-        const text = `${contact.name}\n${contact.role}\nCall Sign: ${contact.callSign}\nEmail: ${contact.email}\nPhone: ${contact.phone}`;
+        const text = `${contact.name}\n${contact.role}\n${t('callSignLabel')}: ${contact.callSign}\nEmail: ${contact.email}\nPhone: ${contact.phone}`;
         if (navigator.share) {
             navigator.share({ title: contact.name, text });
         } else {
             navigator.clipboard.writeText(text);
-            alert('Contact info copied to clipboard!');
+            alert(t('contactCopied'));
         }
     };
 
@@ -233,12 +233,12 @@ END:VCARD`;
     const handleEdit = (contact: Contact) => {
         setSelectedContact(contact);
         // Open edit modal (implement full edit functionality)
-        alert(`Edit functionality for ${contact.name} - Coming soon!`);
+        alert(t('editComingSoon'));
     };
 
     const handleDelete = (contact: Contact) => {
         if (contact.type === 'emergency') {
-            alert('Cannot delete emergency services contacts');
+            alert(t('cannotDeleteEmergency'));
             return;
         }
         if (confirm(t('areYouSure'))) {
@@ -354,7 +354,7 @@ END:VCARD`;
                                 <div>
                                     <h3 className="text-lg font-bold text-gray-900">{contact.name}</h3>
                                     <p className="text-sm text-gray-500">{contact.role}</p>
-                                    <p className="text-sm text-gray-600 mt-1">Call Sign: {contact.callSign}</p>
+                                    <p className="text-sm text-gray-600 mt-1">{t('callSignLabel')}: {contact.callSign}</p>
                                 </div>
                             </div>
 
@@ -364,8 +364,8 @@ END:VCARD`;
                                 contact.type === 'admin' ? 'bg-purple-100 text-purple-700' :
                                 'bg-blue-100 text-blue-700'
                             }`}>
-                                {contact.type === 'emergency' ? 'EMERGENCY' :
-                                 contact.type === 'admin' ? 'ADMIN' : 'RESPONDER'}
+                                {contact.type === 'emergency' ? t('emergencyBadge') :
+                                 contact.type === 'admin' ? t('adminBadge') : t('responderBadge')}
                             </span>
                         </div>
 
@@ -387,28 +387,28 @@ END:VCARD`;
                                 <button
                                     onClick={() => handleShare(contact)}
                                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                    title="Share"
+                                    title={t('shareTitle')}
                                 >
                                     <Icons.Share size={20} className="text-gray-600" />
                                 </button>
                                 <button
                                     onClick={() => handleDownload(contact)}
                                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                    title="Download vCard"
+                                    title={t('downloadVCard')}
                                 >
                                     <Icons.Download size={20} className="text-gray-600" />
                                 </button>
                                 <button
                                     onClick={() => handlePrint(contact)}
                                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                    title="Print"
+                                    title={t('printTitle')}
                                 >
                                     <Icons.Printer size={20} className="text-gray-600" />
                                 </button>
                                 <button
                                     onClick={() => generateQRCode(contact)}
                                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                    title="Generate QR Code"
+                                    title={t('generateQrCode')}
                                 >
                                     <Icons.QrCode size={20} className="text-gray-600" />
                                 </button>
@@ -420,13 +420,13 @@ END:VCARD`;
                                     onClick={() => handleEdit(contact)}
                                     className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
                                 >
-                                    Edit
+                                    {t('editButton')}
                                 </button>
                                 {contact.type !== 'emergency' && (
                                     <button
                                         onClick={() => handleDelete(contact)}
                                         className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="Delete"
+                                        title={t('deleteTitle')}
                                     >
                                         <Icons.Trash size={20} className="text-red-600" />
                                     </button>
@@ -439,8 +439,8 @@ END:VCARD`;
                 {filteredContacts.length === 0 && (
                     <div className="text-center py-12">
                         <Icons.Users size={48} className="text-gray-300 mx-auto mb-4" />
-                        <p className="text-gray-500 font-medium">No contacts found</p>
-                        <p className="text-sm text-gray-400 mt-1">Try adjusting your search or filters</p>
+                        <p className="text-gray-500 font-medium">{t('noContactsFound')}</p>
+                        <p className="text-sm text-gray-400 mt-1">{t('tryAdjustingSearch')}</p>
                     </div>
                 )}
             </div>
@@ -453,13 +453,13 @@ END:VCARD`;
                             <div className="w-48 h-48 mx-auto bg-gray-100 rounded-xl flex items-center justify-center mb-4">
                                 <Icons.QrCode size={64} className="text-gray-400" />
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900 mb-2">QR Code Generated</h3>
-                            <p className="text-sm text-gray-500 mb-4">Scan to save contact information</p>
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">{t('qrCodeGenerated')}</h3>
+                            <p className="text-sm text-gray-500 mb-4">{t('scanToSaveContact')}</p>
                             <button
                                 onClick={() => setShowQRScanner(false)}
                                 className="w-full py-3 bg-black text-white rounded-xl font-semibold hover:bg-gray-800"
                             >
-                                Close
+                                {t('closeButton')}
                             </button>
                         </div>
                     </div>
@@ -471,7 +471,7 @@ END:VCARD`;
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl font-bold text-gray-900">Add New Contact</h3>
+                            <h3 className="text-xl font-bold text-gray-900">{t('addNewContact')}</h3>
                             <button
                                 onClick={() => setShowAddModal(false)}
                                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -484,13 +484,13 @@ END:VCARD`;
                             {/* Name */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Name <span className="text-red-500">*</span>
+                                    {t('nameLabel')} <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={newContact.name}
                                     onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
-                                    placeholder="Enter full name"
+                                    placeholder={t('enterFullName')}
                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
@@ -498,13 +498,13 @@ END:VCARD`;
                             {/* Role */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Role
+                                    {t('roleLabel')}
                                 </label>
                                 <input
                                     type="text"
                                     value={newContact.role}
                                     onChange={(e) => setNewContact({ ...newContact, role: e.target.value })}
-                                    placeholder="e.g., First Responder, Coordinator"
+                                    placeholder={t('rolePlaceholder')}
                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
@@ -512,13 +512,13 @@ END:VCARD`;
                             {/* Call Sign */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Call Sign
+                                    {t('callSignLabel')}
                                 </label>
                                 <input
                                     type="text"
                                     value={newContact.callSign}
                                     onChange={(e) => setNewContact({ ...newContact, callSign: e.target.value })}
-                                    placeholder="e.g., Alpha-1, Bravo-2"
+                                    placeholder={t('callSignPlaceholder')}
                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
@@ -526,13 +526,13 @@ END:VCARD`;
                             {/* Email */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Email <span className="text-red-500">*</span>
+                                    {t('emailLabel')} <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="email"
                                     value={newContact.email}
                                     onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
-                                    placeholder="email@example.com"
+                                    placeholder={t('emailExample')}
                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
@@ -540,13 +540,13 @@ END:VCARD`;
                             {/* Phone */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Phone <span className="text-red-500">*</span>
+                                    {t('phone')} <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="tel"
                                     value={newContact.phone}
                                     onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
-                                    placeholder="+1-555-0123"
+                                    placeholder={t('phonePlaceholder')}
                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
@@ -554,16 +554,16 @@ END:VCARD`;
                             {/* Type */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Type
+                                    {t('typeLabel')}
                                 </label>
                                 <select
                                     value={newContact.type}
                                     onChange={(e) => setNewContact({ ...newContact, type: e.target.value as Contact['type'] })}
                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
-                                    <option value="user">User</option>
-                                    <option value="responder">Responder</option>
-                                    <option value="admin">Admin</option>
+                                    <option value="user">{t('userOption')}</option>
+                                    <option value="responder">{t('responderType')}</option>
+                                    <option value="admin">{t('adminType')}</option>
                                 </select>
                             </div>
                         </div>
@@ -574,14 +574,14 @@ END:VCARD`;
                                 onClick={() => setShowAddModal(false)}
                                 className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-colors"
                             >
-                                Cancel
+                                {t('cancelButton')}
                             </button>
                             <button
                                 onClick={handleAddContact}
                                 className="flex-1 py-3 bg-black text-white rounded-xl font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
                             >
                                 <Icons.Plus size={18} />
-                                Add Contact
+                                {t('addContactButton')}
                             </button>
                         </div>
                     </div>

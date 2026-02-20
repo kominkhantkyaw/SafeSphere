@@ -267,12 +267,12 @@ const Admin: React.FC = () => {
     const ActionButtons = ({ item, type }: { item: any, type: ContextType }) => (
         <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
             {can('edit', type) && (
-                <button onClick={(e) => { e.stopPropagation(); handleEdit(item, type); }} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                <button onClick={(e) => { e.stopPropagation(); handleEdit(item, type); }} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={t('editButton')}>
                     <Icons.Edit size={16} />
                 </button>
             )}
             {can('delete', type) && (
-                <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id, type); }} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id, type); }} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t('deleteTitle')}>
                     <Icons.Trash size={16} />
                 </button>
             )}
@@ -285,11 +285,11 @@ const Admin: React.FC = () => {
 
     const StatusIcon = ({ status }: { status: string }) => {
         switch (status) {
-            case 'approved': return <div title="Approved" className="p-1 rounded-full bg-green-100 text-green-600"><Icons.CheckCircle size={14} /></div>;
-            case 'resolved': return <div title="Resolved" className="p-1 rounded-full bg-gray-100 text-gray-500"><Icons.Archive size={14} /></div>;
-            case 'info_requested': return <div title="Info Requested" className="p-1 rounded-full bg-yellow-100 text-yellow-600"><Icons.HelpCircle size={14} /></div>;
-            case 'active': return <div title="Active" className="p-1 rounded-full bg-blue-100 text-blue-600"><Icons.Activity size={14} /></div>;
-            default: return <div title="Pending" className="p-1 rounded-full bg-gray-100 text-gray-400"><Icons.Clock size={14} /></div>;
+            case 'approved': return <div title={t('approvedAction')} className="p-1 rounded-full bg-green-100 text-green-600"><Icons.CheckCircle size={14} /></div>;
+            case 'resolved': return <div title={t('resolvedAction')} className="p-1 rounded-full bg-gray-100 text-gray-500"><Icons.Archive size={14} /></div>;
+            case 'info_requested': return <div title={t('infoRequestedAction')} className="p-1 rounded-full bg-yellow-100 text-yellow-600"><Icons.HelpCircle size={14} /></div>;
+            case 'active': return <div title={t('activeAction')} className="p-1 rounded-full bg-blue-100 text-blue-600"><Icons.Activity size={14} /></div>;
+            default: return <div title={t('pendingAction')} className="p-1 rounded-full bg-gray-100 text-gray-400"><Icons.Clock size={14} /></div>;
         }
     };
 
@@ -361,7 +361,7 @@ const Admin: React.FC = () => {
                                 <button 
                                     onClick={handlePrintAllReports}
                                     className="flex items-center justify-center bg-gray-100 text-gray-700 w-10 h-10 rounded-lg shadow-sm hover:bg-gray-200 transition-colors"
-                                    title="Print All Reports"
+                                    title={t('printAllReports')}
                                 >
                                     <Icons.Printer size={18} />
                                 </button>

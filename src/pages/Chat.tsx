@@ -546,7 +546,7 @@ const Chat: React.FC = () => {
                             type="button"
                             onClick={handleAttachment}
                             className="w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
-                            title="Attach image or file"
+                            title={t('attachImageOrFile')}
                             aria-label="Attach file"
                         >
                             <Icons.Paperclip size={20} className="text-gray-600" />
@@ -556,7 +556,7 @@ const Chat: React.FC = () => {
                             onClick={handleShareLocation}
                             disabled={locationLoading}
                             className="w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0 disabled:opacity-50 min-w-[44px] min-h-[44px]"
-                            title="Share live location"
+                            title={t('shareLiveLocation')}
                             aria-label="Share location"
                         >
                             {locationLoading ? (
@@ -575,7 +575,7 @@ const Chat: React.FC = () => {
                             className={`w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors shrink-0 min-w-[44px] min-h-[44px] ${
                                 isRecording ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'
                             }`}
-                            title="Voice message"
+                            title={t('voiceMessage')}
                             aria-label="Record voice message"
                         >
                             <Icons.Mic size={20} className={isRecording ? 'text-white' : 'text-gray-600'} />
@@ -608,7 +608,7 @@ const Chat: React.FC = () => {
                             className={`w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all shrink-0 min-w-[44px] min-h-[44px] ${
                                 (messageText.trim() || pendingFile || pendingLocation) ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-200'
                             }`}
-                            title="Send"
+                            title={t('sendButton')}
                             aria-label="Send message"
                         >
                             <Icons.Send size={18} className={(messageText.trim() || pendingFile || pendingLocation) ? 'text-white' : 'text-gray-400'} />

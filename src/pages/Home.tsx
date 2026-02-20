@@ -169,12 +169,12 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
         return () => clearInterval(interval);
     }, [chartRange, loadSeismicData]);
 
-    if (!user) return <div className="p-8 text-gray-700">Loading...</div>;
+    if (!user) return <div className="p-8 text-gray-700">{t('loading')}</div>;
 
     // Handle broadcast alert submission
     const handleSendBroadcast = () => {
         if (!broadcastForm.title || !broadcastForm.description) {
-            alert('Please fill in all required fields');
+            alert(t('fillRequiredFields'));
             return;
         }
         
@@ -248,8 +248,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
             // Day: narrower range (incidents in 24h tend to cluster) – e.g. 3.0–5.2M
             const demoMags = [3.2, 4.1, 3.5, 4.8, 3.8, 5.2, 3.0, 4.5, 3.6, 4.2];
             demoMags.forEach((mag, i) => {
-                const t = dayAgo + (i / (demoMags.length - 1)) * msPer24h;
-                points.push({ mag, time: t, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: 'Demo location' });
+                const tVal = dayAgo + (i / (demoMags.length - 1)) * msPer24h;
+                points.push({ mag, time: tVal, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: t('demoLocation') });
             });
         } else {
             earthquakes
@@ -277,8 +277,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
             // Week: same density as Day – ~8 points for clear low/mod/high
             const demoMags = [2.5, 3.2, 4.5, 3.9, 5.2, 4.2, 3.5, 5.0];
             demoMags.forEach((mag, i) => {
-                const t = weekAgo + (i / (demoMags.length - 1)) * (DAY_COUNT * msPerDay);
-                points.push({ mag, time: t, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: 'Demo location' });
+                const tVal = weekAgo + (i / (demoMags.length - 1)) * (DAY_COUNT * msPerDay);
+                points.push({ mag, time: tVal, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: t('demoLocation') });
             });
         } else {
             const filtered = earthquakes
@@ -327,8 +327,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
             // Month: same density as Year – ~10 points for clear low/mod/high
             const demoMags = [2.1, 3.5, 5.2, 4.0, 6.0, 3.1, 4.8, 2.5, 5.5, 6.4];
             demoMags.forEach((mag, i) => {
-                const t = monthAgo + (i / (demoMags.length - 1)) * (MONTH_DAYS * msPerDay);
-                points.push({ mag, time: t, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: 'Demo location' });
+                const tVal = monthAgo + (i / (demoMags.length - 1)) * (MONTH_DAYS * msPerDay);
+                points.push({ mag, time: tVal, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: t('demoLocation') });
             });
         } else {
             const filtered = earthquakes
@@ -374,8 +374,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
             // Year: full range including major events – e.g. 2.0–7.7M
             const demoMags = [3.2, 5.1, 2.8, 4.5, 3.9, 5.8, 2.1, 4.2, 3.5, 6.0, 2.9, 4.8, 3.1, 5.2, 4.0, 2.5, 6.5, 3.8, 7.2, 2.0, 7.7];
             demoMags.forEach((mag, i) => {
-                const t = yearAgo + (i / (demoMags.length - 1)) * (YEAR_DAYS * msPerDay);
-                points.push({ mag, time: t, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: 'Demo location' });
+                const tVal = yearAgo + (i / (demoMags.length - 1)) * (YEAR_DAYS * msPerDay);
+                points.push({ mag, time: tVal, lat: MYANMAR_CENTER.lat, lng: MYANMAR_CENTER.lng, place: t('demoLocation') });
             });
         } else {
             earthquakes
@@ -409,8 +409,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
             mag < lowMax ? 'low' : mag < modMax ? 'moderate' : 'high';
         const seismicAlertsList: Alert[] = points.slice(0, 5).map((p, idx) => ({
             id: 90000 + idx,
-            title: `Seismic Event – M${p.mag.toFixed(1)}`,
-            description: p.place || `Magnitude ${p.mag.toFixed(1)} earthquake detected.`,
+            title: `${t('seismicEventTitle')} – M${p.mag.toFixed(1)}`,
+            description: p.place || `${t('magnitudeDetected')} M${p.mag.toFixed(1)}`,
             severity: getSeverity(p.mag),
             timestamp: p.time ? new Date(p.time).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
             type: 'earthquake' as const
@@ -663,7 +663,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                             title={t('incidentFrequencyLast24h')}
                             aria-label={t('incidentFrequencyLast24h')}
                         >
-                            24h
+                            {t('twentyFourHours')}
                         </button>
                         <button
                             type="button"
@@ -672,7 +672,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                             title={t('incidentFrequencyByWeek')}
                             aria-label={t('incidentFrequencyByWeek')}
                         >
-                            7d
+                            {t('sevenDays')}
                         </button>
                         <button
                             type="button"
@@ -681,7 +681,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                             title={t('incidentFrequencyLast1Month')}
                             aria-label={t('incidentFrequencyLast1Month')}
                         >
-                            1M
+                            {t('oneMonth')}
                         </button>
                         <button
                             type="button"
@@ -690,7 +690,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                             title={t('incidentFrequencyLast1Year')}
                             aria-label={t('incidentFrequencyLast1Year')}
                         >
-                            1Y
+                            {t('oneYear')}
                         </button>
                     </div>
                     {seismicWaveData.totalAlerts > 0 && (

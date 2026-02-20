@@ -100,19 +100,19 @@ const Resources: React.FC = () => {
     });
 
     const filterOptions = [
-        { id: 'all', label: 'All Types', icon: Icons.Layers },
-        { id: 'nearby', label: 'Nearby (<5km)', icon: Icons.Navigation },
-        { id: 'medical', label: 'Medical', icon: Icons.Medical },
-        { id: 'fire', label: 'Fire', icon: Icons.Flame },
-        { id: 'police', label: 'Police', icon: Icons.ShieldCheck },
-        { id: 'shelter', label: 'Shelter', icon: Icons.Tent },
+        { id: 'all', label: t('allTypes'), icon: Icons.Layers },
+        { id: 'nearby', label: t('nearbyFilter'), icon: Icons.Navigation },
+        { id: 'medical', label: t('medicalFilter'), icon: Icons.Medical },
+        { id: 'fire', label: t('fireFilter'), icon: Icons.Flame },
+        { id: 'police', label: t('policeFilter'), icon: Icons.ShieldCheck },
+        { id: 'shelter', label: t('shelterFilter'), icon: Icons.Tent },
     ];
 
     const urgencyOptions = [
-        { id: 'Low', label: 'Low', icon: Icons.CheckCircle, color: 'text-green-500' },
-        { id: 'Medium', label: 'Medium', icon: Icons.AlertTriangle, color: 'text-yellow-500' },
-        { id: 'High', label: 'High', icon: Icons.AlertTriangle, color: 'text-orange-500' },
-        { id: 'Critical', label: 'Critical', icon: Icons.Zap, color: 'text-red-600' }
+        { id: 'Low', label: t('lowUrgency'), icon: Icons.CheckCircle, color: 'text-green-500' },
+        { id: 'Medium', label: t('mediumUrgency'), icon: Icons.AlertTriangle, color: 'text-yellow-500' },
+        { id: 'High', label: t('highUrgency'), icon: Icons.AlertTriangle, color: 'text-orange-500' },
+        { id: 'Critical', label: t('criticalUrgency'), icon: Icons.Zap, color: 'text-red-600' }
     ];
 
     // --- Actions ---
@@ -149,7 +149,7 @@ const Resources: React.FC = () => {
                 });
             } catch (err) { console.log('Share error', err); }
         } else {
-            alert("Share not supported");
+            alert(t('shareNotSupported'));
         }
     };
 
@@ -185,7 +185,7 @@ const Resources: React.FC = () => {
     return (
         <div className="flex flex-col pb-24 p-4 min-h-screen relative">
             <h1 className="text-2xl font-bold mb-4 flex justify-between items-center">
-                Resource Hub
+                {t('resourceHub')}
                 <button onClick={handleAdd} className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shadow-lg">
                     <Icons.Plus size={18} />
                 </button>
@@ -197,7 +197,7 @@ const Resources: React.FC = () => {
                     <Icons.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                     <input 
                         type="text" 
-                        placeholder="Search hospitals, shelters..." 
+                        placeholder={t('searchResourcesPlaceholder')} 
                         className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-black"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -238,7 +238,7 @@ const Resources: React.FC = () => {
             <div className="flex gap-3 overflow-x-auto no-scrollbar mb-6 pb-2 px-1 items-center">
                 <button
                      onClick={() => setUrgencyFilter('all')}
-                     title="Any Urgency"
+                     title={t('anyUrgency')}
                      className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all flex-shrink-0 ${
                          urgencyFilter === 'all' ? 'bg-gray-800 text-white border-gray-800 shadow-md' : 'bg-white text-gray-400 border-gray-200'
                      }`}
@@ -310,7 +310,7 @@ const Resources: React.FC = () => {
                             <div className="flex items-center gap-2 mb-1 pr-12 flex-wrap">
                                 <h3 className="font-bold text-lg leading-tight">{resource.name}</h3>
                                 {resource.inFloodZone && resource.type === 'shelter' && (
-                                    <div className="text-blue-500 bg-blue-50 p-1 rounded-full border border-blue-100 shrink-0 shadow-sm" title="Located in Flood Zone">
+                                    <div className="text-blue-500 bg-blue-50 p-1 rounded-full border border-blue-100 shrink-0 shadow-sm" title={t('locatedInFloodZone')}>
                                         <Icons.CloudRain size={14} strokeWidth={2.5} />
                                     </div>
                                 )}
@@ -351,7 +351,7 @@ const Resources: React.FC = () => {
 
                             {/* Contact Info Indicator */}
                             {(resource.contactPerson || resource.contactPhone) && (
-                                <div className="absolute bottom-4 right-4 text-blue-600 bg-blue-50 p-1.5 rounded-lg" title="Contact Info Available">
+                                <div className="absolute bottom-4 right-4 text-blue-600 bg-blue-50 p-1.5 rounded-lg" title={t('contactInfoAvailable')}>
                                     <Icons.User size={14} />
                                 </div>
                             )}
@@ -417,7 +417,7 @@ const Resources: React.FC = () => {
                             {selectedResource.inFloodZone && (
                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 border border-blue-200 text-blue-700 rounded-full text-xs font-bold mb-4 shadow-sm">
                                     <Icons.CloudRain size={12} />
-                                    Located in Flood Zone
+                                    {t('locatedInFloodZone')}
                                 </div>
                             )}
 

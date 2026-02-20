@@ -47,7 +47,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
             alert(t('signInSuccess'));
             onLogin(res.user.role, res.user);
         } else {
-            setLoginError(res.message || 'Invalid credentials. Please try again.');
+            setLoginError(res.message || t('invalidCredentials'));
         }
     };
 
@@ -69,7 +69,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
             alert(t('signInSuccess'));
             onLogin(res.user.role, res.user);
         } else {
-            setLoginError('Biometric failed. Please sign in with password.');
+            setLoginError(t('biometricFailed'));
         }
     };
 
@@ -77,11 +77,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
         e.preventDefault();
         setRegisterError(null);
         if (regPassword !== confirmPassword) {
-            setRegisterError('Passwords do not match.');
+            setRegisterError(t('passwordsDoNotMatch'));
             return;
         }
         if (regPassword.length < 6) {
-            setRegisterError('Password must be at least 6 characters.');
+            setRegisterError(t('passwordMinLength'));
             return;
         }
         setLoading(true);
@@ -105,7 +105,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
     const handleConfirmAndSignIn = async () => {
         const pending = getPendingRegistration(pendingEmail);
         if (!pending) {
-            setRegisterError('No pending registration found. Please request an account again.');
+            setRegisterError(t('noPendingRegistration'));
             return;
         }
         setLoading(true);
@@ -152,7 +152,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                         <Icons.ShieldCheck size={32} strokeWidth={2} />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900">{theme.appName}</h1>
-                    <p className="text-gray-500 text-sm mt-1">Emergency Response System</p>
+                    <p className="text-gray-500 text-sm mt-1">{t('loginTitle')}</p>
                 </div>
 
                 {loading ? (
@@ -166,14 +166,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                         ) : (
                              <div className="w-12 h-12 border-4 border-gray-200 rounded-full animate-spin mb-4" style={{ borderTopColor: isDefaultBlue ? '#2563eb' : primaryColor }}></div>
                         )}
-                        <p className="text-sm font-bold text-gray-500 mt-4">Verifying credentials...</p>
+                        <p className="text-sm font-bold text-gray-500 mt-4">{t('verifyingCredentials')}</p>
                     </div>
                 ) : (
                     <>
                         {view === 'login' ? (
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('emailLabel')}</label>
                                     <div className="relative">
                                         <Icons.User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input 
@@ -186,7 +186,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('passwordLabel')}</label>
                                     <div className="relative">
                                         <Icons.Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input 
@@ -200,8 +200,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 </div>
                                 
                                 <div className="flex justify-between items-center text-xs">
-                                    <span className="text-gray-400">Demo: reporter@safesphere.app / Reporter123!</span>
-                                    <button type="button" onClick={() => setShowForgotPassword(true)} className="font-bold text-blue-600 hover:text-blue-700">Forgot?</button>
+                                    <span className="text-gray-400">{t('demoCredentialsHint')}</span>
+                                    <button type="button" onClick={() => setShowForgotPassword(true)} className="font-bold text-blue-600 hover:text-blue-700">{t('forgotPassword')}</button>
                                 </div>
                                 {loginError && <p className="text-sm text-red-600">{loginError}</p>}
 
@@ -210,22 +210,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90 transition-all active:scale-[0.98]"
                                     style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}
                                 >
-                                    Sign In
+                                    {t('signInButton')}
                                 </button>
 
                                 <div className="relative my-6">
                                     <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-                                    <div className="relative flex justify-center text-xs font-bold text-gray-400 uppercase tracking-wide"><span className="bg-white px-2">Or login with</span></div>
+                                    <div className="relative flex justify-center text-xs font-bold text-gray-400 uppercase tracking-wide"><span className="bg-white px-2">{t('orLoginWith')}</span></div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <button type="button" onClick={() => handleBiometric('face')} className="flex flex-col items-center justify-center py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors group">
                                         <Icons.ScanFace size={24} className="text-gray-600 group-hover:text-black mb-1" />
-                                        <span className="text-[10px] font-bold text-gray-500">Face ID</span>
+                                        <span className="text-[10px] font-bold text-gray-500">{t('faceIdButton')}</span>
                                     </button>
                                     <button type="button" onClick={() => handleBiometric('fingerprint')} className="flex flex-col items-center justify-center py-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors group">
                                         <Icons.Fingerprint size={24} className="text-gray-600 group-hover:text-black mb-1" />
-                                        <span className="text-[10px] font-bold text-gray-500">Touch ID</span>
+                                        <span className="text-[10px] font-bold text-gray-500">{t('touchIdButton')}</span>
                                     </button>
                                 </div>
                             </form>
@@ -237,16 +237,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
                                 >
                                     <Icons.ChevronLeft size={18} />
-                                    Back to Sign In
+                                    {t('backToSignIn')}
                                 </button>
                                 <div className="flex justify-center">
                                     <div className="w-14 h-14 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}>
                                         <Icons.Mail size={28} />
                                     </div>
                                 </div>
-                                <h2 className="text-lg font-bold text-gray-900 text-center">Check your email</h2>
+                                <h2 className="text-lg font-bold text-gray-900 text-center">{t('checkYourEmail')}</h2>
                                 <p className="text-sm text-gray-500 text-center">
-                                    We&apos;ve sent a confirmation email to <strong className="text-gray-700">{pendingEmail}</strong>. Click the link in the email to activate your account, or confirm below to sign in now.
+                                    {t('confirmationEmailSent')}
                                 </p>
                                 {registerError && <p className="text-sm text-red-600 text-center">{registerError}</p>}
                                 <button
@@ -256,14 +256,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-70"
                                     style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}
                                 >
-                                    {loading ? 'Confirming...' : 'Confirm & Sign In'}
+                                    {loading ? t('confirming') : t('confirmAndSignIn')}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => { setView('register'); setRegisterError(null); }}
                                     className="w-full py-2 text-sm text-gray-500 hover:text-gray-700"
                                 >
-                                    Use a different email
+                                    {t('useDifferentEmail')}
                                 </button>
                             </div>
                         ) : (
@@ -274,48 +274,48 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-2 -mt-1"
                                 >
                                     <Icons.ChevronLeft size={18} />
-                                    Back to Sign In
+                                    {t('backToSignIn')}
                                 </button>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">First name</label>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('firstName')}</label>
                                         <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="John" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Last name</label>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('lastName')}</label>
                                         <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="Doe" />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Username</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('username')}</label>
                                     <div className="relative">
                                         <Icons.User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="johndoe" />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('emailLabel')}</label>
                                     <div className="relative">
                                         <Icons.Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="john@safesphere.app" />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Phone</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('phone')}</label>
                                     <div className="relative">
                                         <Icons.Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="+1 555 0123" />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('passwordLabel')}</label>
                                     <div className="relative">
                                         <Icons.Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input type="password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} required minLength={6} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="••••••••" />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Confirm password</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('confirmPassword')}</label>
                                     <div className="relative">
                                         <Icons.Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="••••••••" />
@@ -323,31 +323,31 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 </div>
                                 {registerError && <p className="text-sm text-red-600">{registerError}</p>}
                                 <button type="submit" disabled={loading} className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-70" style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}>
-                                    {loading ? 'Sending...' : 'Request Account'}
+                                    {loading ? t('sending') : t('requestAccount')}
                                 </button>
                             </form>
                         )}
 
                         <div className="mt-6 text-center">
                             <p className="text-sm text-gray-500">
-                                {view === 'login' && "Don't have an account?"}
+                                {view === 'login' && t('dontHaveAccount')}
                                 {view === 'login' && (
                                     <button 
                                         onClick={() => { setView('register'); setRegisterError(null); }}
                                         className="font-bold ml-1 text-blue-600 hover:text-blue-700 underline"
                                         style={!isDefaultBlue ? { color: primaryColor } : undefined}
                                     >
-                                        Request Access
+                                        {t('requestAccess')}
                                     </button>
                                 )}
-                                {(view === 'register' || view === 'check-email') && "Already have an account?"}
+                                {(view === 'register' || view === 'check-email') && t('alreadyHaveAccount')}
                                 {(view === 'register' || view === 'check-email') && (
                                     <button 
                                         onClick={() => { setView('login'); setRegisterError(null); }}
                                         className="font-bold ml-1 text-blue-600 hover:text-blue-700 underline"
                                         style={!isDefaultBlue ? { color: primaryColor } : undefined}
                                     >
-                                        Sign In
+                                        {t('signInButton')}
                                     </button>
                                 )}
                             </p>
@@ -357,7 +357,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
 
                 {/* Footer inside white card */}
                 <div className="mt-8 pt-6 border-t border-gray-100 text-center text-gray-400 text-xs">
-                    &copy; 2025 {theme.appName}. Secure Connection.
+                    &copy; 2025 {theme.appName}. {t('secureConnection')}
                 </div>
             </div>
 

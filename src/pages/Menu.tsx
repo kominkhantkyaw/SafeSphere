@@ -23,8 +23,8 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
 
     const handleShareApp = async () => {
         const shareData = {
-            title: 'SafeSphere - Emergency Response System',
-            text: '🚨 Stay prepared and connected during emergencies! Download SafeSphere - your comprehensive emergency response companion with real-time alerts, incident reporting, and safety resources.',
+            title: t('shareAppTitle'),
+            text: t('shareAppText'),
             url: window.location.origin
         };
 
@@ -46,16 +46,15 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
     const copyToClipboard = async (text: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            alert('✅ SafeSphere app link copied to clipboard!\n\nShare with your friends and family to keep them safe.');
+            alert(`✅ ${t('linkCopied')}\n\n${t('shareWithFriends')}`);
         } catch (err) {
-            // Fallback for older browsers
             const textArea = document.createElement('textarea');
             textArea.value = text;
             document.body.appendChild(textArea);
             textArea.select();
             document.execCommand('copy');
             document.body.removeChild(textArea);
-            alert('✅ SafeSphere app link copied to clipboard!');
+            alert(`✅ ${t('linkCopied')}`);
         }
     };
 
@@ -161,7 +160,7 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
 
             {/* Menu Title */}
             <div className="px-6 py-6">
-                <h2 className="text-2xl font-bold text-gray-900">Menu</h2>
+                <h2 className="text-2xl font-bold text-gray-900">{t('menuTitle')}</h2>
             </div>
 
             {/* Menu Sections */}
@@ -187,7 +186,7 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
                         onClick={() => onNavigate('profile')}
                         className="w-full bg-gray-900 text-white font-semibold py-3 rounded-xl hover:bg-gray-800 transition-colors"
                     >
-                        View Profile
+                        {t('viewProfile')}
                     </button>
                 </div>
 
@@ -216,19 +215,19 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
                 {/* App Version */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden p-4">
                     <div className="flex justify-between items-center text-sm text-gray-500">
-                        <span>App Version</span>
+                        <span>{t('appVersion')}</span>
                         <span className="font-semibold text-gray-900">2.0.0</span>
                     </div>
                     <div className="flex justify-between items-center text-sm text-gray-500 mt-2">
-                        <span>Last Updated</span>
+                        <span>{t('lastUpdated')}</span>
                         <span className="font-semibold text-gray-900">Dec 10, 2025</span>
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-100">
                         <p className="text-xs text-gray-400 text-center">
-                            SafeSphere Emergency Response System
+                            {t('shareAppTitle')}
                         </p>
                         <p className="text-xs text-gray-400 text-center mt-1">
-                            © 2025 SafeSphere. All rights reserved.
+                            © 2025 SafeSphere. {t('allRightsReserved')}
                         </p>
                     </div>
                 </div>
@@ -240,7 +239,7 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
                         className="w-full flex items-center justify-center gap-2 p-4 text-red-600 hover:bg-red-50 transition-colors"
                     >
                         <Icons.LogOut size={20} />
-                        <span className="font-semibold">Log Out</span>
+                        <span className="font-semibold">{t('logOut')}</span>
                     </button>
                 </div>
             </div>

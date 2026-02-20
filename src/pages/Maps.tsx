@@ -919,7 +919,7 @@ const Maps: React.FC = () => {
                 <div className="pointer-events-auto bg-white/90 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-gray-200">
                     <h1 className="font-bold text-lg flex items-center gap-2">
                         <Icons.Globe size={20} className="text-blue-600" />
-                        Live Command Map
+                        {t('liveCommandMap')}
                     </h1>
                 </div>
 
@@ -927,7 +927,7 @@ const Maps: React.FC = () => {
                     <button 
                         onClick={() => setShowLayerControl(!showLayerControl)}
                         className={`p-3 rounded-full shadow-lg transition-colors ${showLayerControl ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-50'}`}
-                        title="Layers"
+                        title={t('layersButton')}
                     >
                         <Icons.Layers size={20} />
                     </button>
@@ -935,7 +935,7 @@ const Maps: React.FC = () => {
                     <button 
                             onClick={() => setShowQuakeList(!showQuakeList)}
                             className={`p-3 rounded-full shadow-lg transition-colors ${showQuakeList ? 'bg-yellow-500 text-white' : 'bg-white text-black hover:bg-gray-50'}`}
-                            title="Seismic Events"
+                            title={t('seismicEvents')}
                         >
                             <Icons.Activity size={20} />
                         </button>
@@ -943,7 +943,7 @@ const Maps: React.FC = () => {
                     <button 
                          onClick={() => setNearbyFilter(!nearbyFilter)}
                          className={`p-3 rounded-full shadow-lg transition-colors ${nearbyFilter ? 'bg-blue-600 text-white' : 'bg-white text-black hover:bg-gray-50'}`}
-                         title="Filter 5km Radius"
+                         title={t('filter5kmRadius')}
                     >
                         <Icons.Filter size={20} />
                     </button>
@@ -951,7 +951,7 @@ const Maps: React.FC = () => {
                     <button 
                         onClick={handleRecenter}
                         className="p-3 bg-white rounded-full shadow-lg text-black hover:bg-gray-50"
-                        title="Locate Me"
+                        title={t('locateMe')}
                     >
                         <Icons.Navigation size={20} />
                     </button>
@@ -959,7 +959,7 @@ const Maps: React.FC = () => {
                     <button 
                         onClick={() => setShowSearchPanel(!showSearchPanel)}
                         className={`p-3 rounded-full shadow-lg transition-colors ${showSearchPanel ? 'bg-blue-600 text-white' : 'bg-white text-black hover:bg-gray-50'}`}
-                        title="Search"
+                        title={t('searchButton')}
                     >
                         <Icons.Search size={20} />
                     </button>
@@ -982,7 +982,7 @@ const Maps: React.FC = () => {
                                 type="search"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="Incidents, resources, shelters..."
+                                placeholder={t('searchPlaceholder')}
                                 aria-label="Search map"
                                 className="flex-1 py-2.5 px-2 text-sm font-medium bg-transparent focus:outline-none placeholder:text-gray-400"
                             />
@@ -1025,50 +1025,50 @@ const Maps: React.FC = () => {
                     
                     {/* Base Map Switcher */}
                     <div className="mb-6">
-                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">Base Map Style</h3>
+                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">{t('baseMapStyle')}</h3>
                         <div className="grid grid-cols-3 gap-2">
                             <button onClick={() => setBaseMap('dark')} className={`flex flex-col items-center p-2 rounded-xl border ${baseMap === 'dark' ? 'border-black bg-gray-50' : 'border-gray-100 hover:bg-gray-50'}`}>
-                                <Icons.Moon size={16} className="mb-1"/> <span className="text-[10px] font-bold">Dark</span>
+                                <Icons.Moon size={16} className="mb-1"/> <span className="text-[10px] font-bold">{t('darkMap')}</span>
                             </button>
                             <button onClick={() => setBaseMap('light')} className={`flex flex-col items-center p-2 rounded-xl border ${baseMap === 'light' ? 'border-black bg-gray-50' : 'border-gray-100 hover:bg-gray-50'}`}>
-                                <Icons.Sun size={16} className="mb-1"/> <span className="text-[10px] font-bold">Light</span>
+                                <Icons.Sun size={16} className="mb-1"/> <span className="text-[10px] font-bold">{t('lightMap')}</span>
                             </button>
                             <button onClick={() => setBaseMap('satellite')} className={`flex flex-col items-center p-2 rounded-xl border ${baseMap === 'satellite' ? 'border-black bg-gray-50' : 'border-gray-100 hover:bg-gray-50'}`}>
-                                <Icons.Satellite size={16} className="mb-1"/> <span className="text-[10px] font-bold">Sat</span>
+                                <Icons.Satellite size={16} className="mb-1"/> <span className="text-[10px] font-bold">{t('satelliteMap')}</span>
                             </button>
                         </div>
                     </div>
 
                     {/* Operational Overlays */}
                     <div className="mb-6">
-                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">Data Layers</h3>
+                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">{t('dataLayers')}</h3>
                         <div className="space-y-2">
                              <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Emergency size={16} className="text-red-500" /> Incidents</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Emergency size={16} className="text-red-500" /> {t('incidentsLayer')}</div>
                                 <input type="checkbox" checked={activeLayers.incidents} onChange={e => setActiveLayers(p => ({...p, incidents: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.User size={16} className="text-blue-600" /> Responders</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.User size={16} className="text-blue-600" /> {t('respondersLayer')}</div>
                                 <input type="checkbox" checked={activeLayers.responders} onChange={e => setActiveLayers(p => ({...p, responders: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Resources size={16} className="text-green-500" /> Resources</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Resources size={16} className="text-green-500" /> {t('resourcesLayer')}</div>
                                 <input type="checkbox" checked={activeLayers.resources} onChange={e => setActiveLayers(p => ({...p, resources: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.CloudRain size={16} className="text-blue-500" /> Weather Radar</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.CloudRain size={16} className="text-blue-500" /> {t('weatherRadar')}</div>
                                 <input type="checkbox" checked={activeLayers.weather} onChange={e => setActiveLayers(p => ({...p, weather: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Car size={16} className="text-red-500" /> Traffic Conditions</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Car size={16} className="text-red-500" /> {t('trafficConditions')}</div>
                                 <input type="checkbox" checked={activeLayers.traffic} onChange={e => setActiveLayers(p => ({...p, traffic: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                              <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Flame size={16} className="text-orange-500" /> Heatmap Density</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Flame size={16} className="text-orange-500" /> {t('heatmapDensity')}</div>
                                 <input type="checkbox" checked={activeLayers.heatmap} onChange={e => setActiveLayers(p => ({...p, heatmap: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Activity size={16} className="text-orange-600" /> Seismic Hazard Zones</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Activity size={16} className="text-orange-600" /> {t('seismicHazardZones')}</div>
                                 <input type="checkbox" checked={activeLayers.seismicZones} onChange={e => setActiveLayers(p => ({...p, seismicZones: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                         </div>
@@ -1076,29 +1076,29 @@ const Maps: React.FC = () => {
 
                     {/* Tactical Simulation */}
                     <div className="mb-6">
-                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">Tactical Simulation</h3>
+                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">{t('tacticalSimulation')}</h3>
                         <div className="space-y-2">
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.User size={16} className="text-emerald-600" /> Ground Units</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.User size={16} className="text-emerald-600" /> {t('groundUnits')}</div>
                                 <input type="checkbox" checked={activeLayers.simGroundUnits} onChange={e => setActiveLayers(p => ({...p, simGroundUnits: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Navigation size={16} className="text-blue-600" /> Air Nodes</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Navigation size={16} className="text-blue-600" /> {t('airNodes')}</div>
                                 <input type="checkbox" checked={activeLayers.simAirNodes} onChange={e => setActiveLayers(p => ({...p, simAirNodes: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             {activeLayers.simAirNodes && (
                                 <div className="pl-2 mt-1">
-                                    <label className="block text-[10px] font-bold text-gray-400 mb-1">Altitude Filter (FT)</label>
+                                    <label className="block text-[10px] font-bold text-gray-400 mb-1">{t('altitudeFilterFt')}</label>
                                     <input type="range" min={0} max={35000} step={1000} value={altitudeFilter} onChange={e => setAltitudeFilter(parseInt(e.target.value))} className="w-full accent-blue-600" />
-                                    <span className="text-[10px] font-bold text-gray-600">{altitudeFilter} FT</span>
+                                    <span className="text-[10px] font-bold text-gray-600">{altitudeFilter} {t('feetUnit')}</span>
                                 </div>
                             )}
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.MapPin size={16} className="text-violet-600" /> Objectives</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.MapPin size={16} className="text-violet-600" /> {t('objectives')}</div>
                                 <input type="checkbox" checked={activeLayers.simObjectives} onChange={e => setActiveLayers(p => ({...p, simObjectives: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Resources size={16} className="text-blue-500" /> Shelters</div>
+                                <div className="flex items-center gap-2 text-sm font-medium"><Icons.Resources size={16} className="text-blue-500" /> {t('shelters')}</div>
                                 <input type="checkbox" checked={activeLayers.simShelters} onChange={e => setActiveLayers(p => ({...p, simShelters: e.target.checked}))} className="rounded text-black focus:ring-0" />
                             </label>
                         </div>
@@ -1106,21 +1106,21 @@ const Maps: React.FC = () => {
 
                     {/* Facility Management */}
                     <div className="mb-6">
-                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">Facility Safety</h3>
+                        <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">{t('facilitySafety')}</h3>
                         <label className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer mb-2">
-                            <div className="flex items-center gap-2 text-sm font-medium"><Icons.DoorOpen size={16} className="text-green-600" /> Safety Assets</div>
+                            <div className="flex items-center gap-2 text-sm font-medium"><Icons.DoorOpen size={16} className="text-green-600" /> {t('safetyAssets')}</div>
                             <input type="checkbox" checked={activeLayers.safety} onChange={e => setActiveLayers(p => ({...p, safety: e.target.checked}))} className="rounded text-black focus:ring-0" />
                         </label>
                         
                         {activeLayers.safety && (
                             <div className="pl-2">
-                                <label className="block text-[10px] font-bold text-gray-400 mb-1">Building Filter</label>
+                                <label className="block text-[10px] font-bold text-gray-400 mb-1">{t('buildingFilter')}</label>
                                 <select 
                                     value={buildingFilter} 
                                     onChange={(e) => setBuildingFilter(e.target.value)} 
                                     className="w-full p-2 rounded-lg border text-sm"
                                 >
-                                    <option value="All">All Buildings</option>
+                                    <option value="All">{t('allBuildings')}</option>
                                     {uniqueBuildings.map(b => <option key={b} value={b}>{b}</option>)}
                                 </select>
                             </div>
@@ -1140,7 +1140,7 @@ const Maps: React.FC = () => {
                     <div className="flex gap-2 mb-3">
                         <input 
                             type="text" 
-                            placeholder="Search location..." 
+                            placeholder={t('searchLocationPlaceholder')} 
                             className="w-full p-2 rounded-lg border text-xs"
                             value={quakeSearch}
                             onChange={(e) => setQuakeSearch(e.target.value)}
@@ -1209,7 +1209,7 @@ const Maps: React.FC = () => {
                         onClick={() => { if (selectedSimEntity.lat && selectedSimEntity.lng) mapInstance.current?.flyTo([selectedSimEntity.lat, selectedSimEntity.lng], 14); }}
                         className="mt-3 w-full py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2"
                     >
-                        <Icons.Navigation size={14} /> Track Node
+                        <Icons.Navigation size={14} /> {t('trackNode')}
                     </button>
                 </div>
             )}

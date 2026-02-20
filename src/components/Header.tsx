@@ -57,7 +57,7 @@ const Header: React.FC<HeaderProps> = ({
                     <button
                         onClick={onBackClick}
                         className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 active:scale-95 transition-colors mr-2 touch-manipulation"
-                        title="Go Back"
+                        title={t('goBack')}
                         aria-label="Go back"
                     >
                         <Icons.ChevronLeft size={20} />
@@ -66,7 +66,7 @@ const Header: React.FC<HeaderProps> = ({
                     <button
                         onClick={onMenuClick}
                         className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 active:scale-95 transition-colors mr-2 touch-manipulation"
-                        title="Menu"
+                        title={t('menuTitle')}
                         aria-label="Open menu"
                     >
                         <Icons.Menu size={20} />
@@ -102,7 +102,7 @@ const Header: React.FC<HeaderProps> = ({
                     <button 
                         onClick={onNotificationClick}
                         className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 active:scale-95 transition-colors relative touch-manipulation"
-                        title="Notifications"
+                        title={t('notificationsTitle')}
                         aria-label="Notifications"
                     >
                         <Icons.Bell size={18} />

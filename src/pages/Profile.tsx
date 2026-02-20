@@ -106,7 +106,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                             <button
                                 onClick={triggerFileInput}
                                 className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-gray-50 transition-all active:scale-95 border-2 border-gray-200"
-                                title="Upload/Change Image"
+                                title={t('uploadChangeImage')}
                             >
                                 <Icons.Camera size={18} className="text-blue-600" />
                             </button>
@@ -114,7 +114,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                 <button
                                     onClick={handleDeleteAvatar}
                                     className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-red-50 transition-all active:scale-95 border-2 border-red-200"
-                                    title="Delete Image"
+                                    title={t('deleteImage')}
                                 >
                                     <Icons.Trash size={18} className="text-red-600" />
                                 </button>
