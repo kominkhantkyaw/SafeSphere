@@ -3,6 +3,7 @@ import { Icons } from '../components/Icon';
 import { EarthquakeEvent, SafetyAsset, IncidentReport, Resource, User } from '../types';
 import { fetchEarthquakes, fetchSafetyAssets, fetchReports, fetchResources, fetchAllUsers, saveUser } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
+import { escapeHtml } from '../services/crypto';
 
 declare global {
   interface Window {
@@ -451,31 +452,31 @@ const Maps: React.FC = () => {
                     iconAnchor
                 });
 
-                // Rich Popup Content
+                // Rich Popup Content (all user-controlled values escaped to prevent XSS)
                 const popupContent = `
                     <div style="min-width: 160px; max-width: 90vw; font-family: 'Inter', sans-serif;">
                         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #f3f4f6; padding-bottom: 8px; margin-bottom: 8px;">
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <div style="width:10px; height:10px; border-radius:50%; background-color:${color};"></div>
-                                <span style="font-weight: 800; font-size: 13px; text-transform: uppercase; color:#111;">${r.type}</span>
+                                <span style="font-weight: 800; font-size: 13px; text-transform: uppercase; color:#111;">${escapeHtml(r.type)}</span>
                             </div>
-                            <span style="font-size: 9px; font-weight: 700; background: ${r.urgency === 'Critical' ? '#fee2e2' : '#f3f4f6'}; color: ${r.urgency === 'Critical' ? '#991b1b' : '#374151'}; padding: 2px 6px; border-radius: 99px; text-transform:uppercase;">${r.urgency}</span>
+                            <span style="font-size: 9px; font-weight: 700; background: ${r.urgency === 'Critical' ? '#fee2e2' : '#f3f4f6'}; color: ${r.urgency === 'Critical' ? '#991b1b' : '#374151'}; padding: 2px 6px; border-radius: 99px; text-transform:uppercase;">${escapeHtml(r.urgency)}</span>
                         </div>
                         
-                        <div style="font-size: 10px; font-weight:600; color: #9ca3af; margin-bottom: 4px; text-transform:uppercase;">Status: ${r.status}</div>
-                        <div style="font-size: 12px; color: #374151; margin-bottom: 12px; line-height: 1.4; max-height: 60px; overflow:hidden; text-overflow:ellipsis;">${r.description}</div>
+                        <div style="font-size: 10px; font-weight:600; color: #9ca3af; margin-bottom: 4px; text-transform:uppercase;">Status: ${escapeHtml(r.status)}</div>
+                        <div style="font-size: 12px; color: #374151; margin-bottom: 12px; line-height: 1.4; max-height: 60px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(r.description)}</div>
                         
-                        ${r.contactPhone ? `<div style="font-size:11px; margin-bottom:8px; display:flex; gap:4px; color:#4b5563;"><span style="font-weight:700;">Tel:</span> <a href="tel:${r.contactPhone}" style="color:#2563eb; text-decoration:none;">${r.contactPhone}</a></div>` : ''}
+                        ${r.contactPhone ? `<div style="font-size:11px; margin-bottom:8px; display:flex; gap:4px; color:#4b5563;"><span style="font-weight:700;">Tel:</span> <a href="tel:${encodeURIComponent(r.contactPhone)}" style="color:#2563eb; text-decoration:none;">${escapeHtml(r.contactPhone)}</a></div>` : ''}
 
                         <div style="display: flex; gap: 8px; margin-top: 12px;">
-                             <button onclick="window.handleMapAction('report', ${r.id})" style="flex: 1; background-color: #000; color: #fff; border: none; font-size: 11px; padding: 8px 0; border-radius: 6px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">Full Details</button>
-                             <a href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}" target="_blank" style="flex: 1; text-align: center; background-color: #f3f4f6; color: #1f2937; border: 1px solid #e5e7eb; font-size: 11px; padding: 8px 0; border-radius: 6px; text-decoration: none; font-weight: 600;">Directions</a>
+                             <button onclick="window.handleMapAction('report', ${Number(r.id)})" style="flex: 1; background-color: #000; color: #fff; border: none; font-size: 11px; padding: 8px 0; border-radius: 6px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">Full Details</button>
+                             <a href="https://www.google.com/maps/dir/?api=1&destination=${Number(r.lat)},${Number(r.lng)}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background-color: #f3f4f6; color: #1f2937; border: 1px solid #e5e7eb; font-size: 11px; padding: 8px 0; border-radius: 6px; text-decoration: none; font-weight: 600;">Directions</a>
                         </div>
                     </div>
                 `;
 
                 const marker = window.L.marker([r.lat, r.lng], { icon })
-                    .bindTooltip(`${r.type} (${r.urgency})`, { direction: 'top', offset: [0, -12], opacity: 0.9, className: 'font-bold text-xs' })
+                    .bindTooltip(`${escapeHtml(r.type)} (${escapeHtml(r.urgency)})`, { direction: 'top', offset: [0, -12], opacity: 0.9, className: 'font-bold text-xs' })
                     .bindPopup(popupContent);
                 marker.addTo(mapInstance.current);
                 markersRef.current.push(marker);
@@ -527,22 +528,22 @@ const Maps: React.FC = () => {
                 const popupContent = `
                     <div style="min-width: 160px; max-width: 90vw; font-family: 'Inter', sans-serif;">
                         <div style="border-bottom: 1px solid #f3f4f6; padding-bottom: 8px; margin-bottom: 8px;">
-                             <div style="font-weight: 800; font-size: 14px; margin-bottom: 2px; color:#111;">${r.name}</div>
-                             <div style="font-size: 10px; font-weight: 700; color: ${color}; text-transform: uppercase; letter-spacing: 0.5px;">${r.type} Resource</div>
+                             <div style="font-weight: 800; font-size: 14px; margin-bottom: 2px; color:#111;">${escapeHtml(r.name)}</div>
+                             <div style="font-size: 10px; font-weight: 700; color: ${color}; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHtml(r.type)} Resource</div>
                         </div>
                         
                         <div style="font-size: 11px; color: #4b5563; margin-bottom: 8px; display:flex; gap:4px; align-items:center;">
-                            <span style="opacity:0.6;">📍</span> ${r.address}
+                            <span style="opacity:0.6;">📍</span> ${escapeHtml(r.address)}
                         </div>
-                        ${r.phone ? `<div style="font-size: 11px; color: #4b5563; margin-bottom: 8px; display:flex; gap:4px; align-items:center;"><span style="opacity:0.6;">📞</span> ${r.phone}</div>` : ''}
+                        ${r.phone ? `<div style="font-size: 11px; color: #4b5563; margin-bottom: 8px; display:flex; gap:4px; align-items:center;"><span style="opacity:0.6;">📞</span> ${escapeHtml(r.phone)}</div>` : ''}
                         
                         ${capBar}
 
-                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height:1.4;">${r.description || 'No description available.'}</div>
+                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height:1.4;">${escapeHtml(r.description) || 'No description available.'}</div>
 
                         <div style="display: flex; gap: 8px;">
-                             <button onclick="window.handleMapAction('resource', ${r.id})" style="flex: 1; background-color: #000; color: #fff; border: none; font-size: 11px; padding: 8px 0; border-radius: 6px; font-weight: 600; cursor: pointer;">Full Profile</button>
-                             <a href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}" target="_blank" style="flex: 1; text-align: center; background-color: #f3f4f6; color: #1f2937; border: 1px solid #e5e7eb; font-size: 11px; padding: 8px 0; border-radius: 6px; text-decoration: none; font-weight: 600;">Nav</a>
+                             <button onclick="window.handleMapAction('resource', ${Number(r.id)})" style="flex: 1; background-color: #000; color: #fff; border: none; font-size: 11px; padding: 8px 0; border-radius: 6px; font-weight: 600; cursor: pointer;">Full Profile</button>
+                             <a href="https://www.google.com/maps/dir/?api=1&destination=${Number(r.lat)},${Number(r.lng)}" target="_blank" rel="noopener noreferrer" style="flex: 1; text-align: center; background-color: #f3f4f6; color: #1f2937; border: 1px solid #e5e7eb; font-size: 11px; padding: 8px 0; border-radius: 6px; text-decoration: none; font-weight: 600;">Nav</a>
                         </div>
                     </div>
                 `;
@@ -569,13 +570,13 @@ const Maps: React.FC = () => {
                     weight: 1,
                     opacity: 1,
                     fillOpacity: 0.7
-                }).bindTooltip(`${mag.toFixed(1)} Mag - ${eq.properties.place}`, { direction: 'top' })
+                }).bindTooltip(`${mag.toFixed(1)} Mag - ${escapeHtml(eq.properties.place)}`, { direction: 'top' })
                 .bindPopup(`
                     <div style="min-width: 120px; max-width: 90vw; font-family:'Inter',sans-serif;">
                         <div style="border-bottom:1px solid #eee; padding-bottom:4px; margin-bottom:4px;">
                             <b style="font-size:16px; color:${color};">${mag.toFixed(1)}</b> <span style="font-size:10px; text-transform:uppercase; color:#888;">Magnitude</span>
                         </div>
-                        <div style="font-size:12px; font-weight:600; margin-bottom:2px;">${eq.properties.place}</div>
+                        <div style="font-size:12px; font-weight:600; margin-bottom:2px;">${escapeHtml(eq.properties.place)}</div>
                         <div style="font-size:10px; color:#666;">${new Date(eq.properties.time).toLocaleString()}</div>
                     </div>
                 `);
@@ -770,7 +771,7 @@ const Maps: React.FC = () => {
                 const iconHtml = `<div style="width:40px;height:40px;background:white;border:2px solid ${o.color};border-radius:12px;display:flex;align-items:center;justify-content:center;color:${o.color};box-shadow:0 2px 8px rgba(0,0,0,0.15)"><span style="font-size:18px">${o.type === 'RENDEZVOUS' ? '📍' : o.type === 'EXTRACTION' ? '🚁' : '🏁'}</span></div>`;
                 const m = window.L.marker([o.lat, o.lng], {
                     icon: window.L.divIcon({ html: iconHtml, iconSize: [40, 40] })
-                }).bindPopup(`<div style="min-width:140px;max-width:90vw;padding:8px"><span style="font-size:9px;font-weight:700;background:${o.color}20;color:${o.color};padding:2px 6px;border-radius:4px">${o.type}</span><h4 style="margin:8px 0 4px;font-size:14px;font-weight:800">${o.title}</h4><p style="font-size:11px;color:#64748b">${o.details}</p></div>`)
+                }).bindPopup(`<div style="min-width:140px;max-width:90vw;padding:8px"><span style="font-size:9px;font-weight:700;background:${escapeHtml(o.color)}20;color:${escapeHtml(o.color)};padding:2px 6px;border-radius:4px">${escapeHtml(o.type)}</span><h4 style="margin:8px 0 4px;font-size:14px;font-weight:800">${escapeHtml(o.title)}</h4><p style="font-size:11px;color:#64748b">${escapeHtml(o.details)}</p></div>`)
                     .on('click', () => onSimEntityClick({ ...o, category: 'Objective' }, o.lat, o.lng)).addTo(mapInstance.current);
                 simMarkersRef.current.push(m);
             });
@@ -783,7 +784,7 @@ const Maps: React.FC = () => {
                 const iconHtml = `<div style="width:40px;height:40px;background:white;border:2px solid ${color};border-radius:12px;display:flex;align-items:center;justify-content:center;color:${color};box-shadow:0 2px 8px rgba(0,0,0,0.15)"><span style="font-size:18px">${s.type === 'HOSPITAL' ? '🏥' : '🏕️'}</span></div>`;
                 const m = window.L.marker([s.lat, s.lng], {
                     icon: window.L.divIcon({ html: iconHtml, iconSize: [40, 40] })
-                }).bindPopup(`<div style="min-width:140px;max-width:90vw;padding:8px"><span style="font-size:9px;font-weight:700;color:${color}">${s.type} Node</span><h4 style="margin:8px 0 0;font-size:14px;font-weight:800">${s.name}</h4></div>`)
+                }).bindPopup(`<div style="min-width:140px;max-width:90vw;padding:8px"><span style="font-size:9px;font-weight:700;color:${color}">${escapeHtml(s.type)} Node</span><h4 style="margin:8px 0 0;font-size:14px;font-weight:800">${escapeHtml(s.name)}</h4></div>`)
                     .on('click', () => onSimEntityClick({ ...s, category: 'Shelter' }, s.lat, s.lng)).addTo(mapInstance.current);
                 simMarkersRef.current.push(m);
             });
@@ -846,15 +847,15 @@ const Maps: React.FC = () => {
                 const popupContent = `
                     <div style="min-width: 160px; max-width: 90vw; font-family: 'Inter', sans-serif;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <div style="font-weight: 800; font-size: 14px;">${u.name}</div>
-                            <span style="font-size:9px; font-weight:700; background:#dbeafe; color:#1e40af; padding:2px 6px; border-radius:10px;">${u.role}</span>
+                            <div style="font-weight: 800; font-size: 14px;">${escapeHtml(u.name)}</div>
+                            <span style="font-size:9px; font-weight:700; background:#dbeafe; color:#1e40af; padding:2px 6px; border-radius:10px;">${escapeHtml(u.role)}</span>
                         </div>
                         <div style="margin-bottom: 8px;">
                             <label style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #374151; display: block; margin-bottom: 2px;">Call Sign</label>
                             <input 
                                 type="text" 
-                                value="${callSign}" 
-                                onblur="window.updateCallSign(${u.id}, this.value)"
+                                value="${escapeHtml(callSign)}" 
+                                onblur="window.updateCallSign(${Number(u.id)}, this.value)"
                                 placeholder="Set Call Sign"
                                 style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; background:#f9fafb;"
                             />
