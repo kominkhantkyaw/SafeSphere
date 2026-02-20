@@ -39,6 +39,7 @@ docs/
 # ── Markdown docs to exclude ─────────────────────
 workingprototype.md
 implementation.md
+DEPLOY_CHECKLIST.md
 
 # ── Database dumps (schema README is committed) ──
 backend/supabase/safesphere_postgres.sql
