@@ -343,9 +343,9 @@ const Admin: React.FC = () => {
                 ))}
             </div>
 
-            {/* Safety Map Tab */}
+            {/* Safety Map Tab – fill viewport to bottom for responsive, user-friendly map */}
             {activeTab === 'map' && (
-                 <div className="flex-1 w-full h-full overflow-hidden rounded-2xl border border-gray-300 shadow-inner relative">
+                 <div className="flex-1 flex flex-col w-full min-h-[calc(100vh-14rem)] sm:min-h-[calc(100vh-12rem)] overflow-hidden rounded-2xl border border-gray-300 shadow-inner relative bg-gray-50">
                     <SafetyMapEditor />
                  </div>
             )}
@@ -405,11 +405,11 @@ const Admin: React.FC = () => {
                                     className="w-full pl-7 p-2 rounded-lg border border-gray-300 text-xs bg-white font-bold"
                                 >
                                     <option value="all">{t('statusAll')}</option>
-                                    <option value="pending">Pending</option>
-                                    <option value="active">Active</option>
-                                    <option value="approved">Approved</option>
-                                    <option value="info_requested">Info Req</option>
-                                    <option value="resolved">Resolved</option>
+                                    <option value="pending">{t('pendingStatus')}</option>
+                                    <option value="active">{t('active')}</option>
+                                    <option value="approved">{t('approvedStatus')}</option>
+                                    <option value="info_requested">{t('infoRequestedShort')}</option>
+                                    <option value="resolved">{t('resolvedStatus')}</option>
                                 </select>
                             </div>
 
@@ -421,7 +421,7 @@ const Admin: React.FC = () => {
                                     className="w-full pl-7 p-2 rounded-lg border border-gray-300 text-xs bg-white font-bold"
                                 >
                                     <option value="all">{t('typeAll')}</option>
-                                    {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                    {uniqueTypes.map(type => <option key={type} value={type}>{translateReportType(type)}</option>)}
                                 </select>
                             </div>
 
@@ -564,7 +564,7 @@ const Admin: React.FC = () => {
                             {isEditingDetail ? (
                                 <div className="space-y-4 mb-6 bg-gray-50 p-4 rounded-xl border border-blue-200 animate-in fade-in ring-2 ring-blue-100">
                                     <h3 className="text-xs font-bold text-blue-600 uppercase mb-2">{t('editingMode')}</h3>
-                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('hazardType')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.type} onChange={e => setEditData({...editData, type: e.target.value})}><option>Structural Fire</option><option>Flash Flood</option><option>Medical Emergency</option><option>Power Outage</option><option>Hazardous Spill</option><option>Other</option></select></div>
+                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('hazardType')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.type} onChange={e => setEditData({...editData, type: e.target.value})}><option value="Structural Fire">{t('structuralFire')}</option><option value="Flash Flood">{t('flashFlood')}</option><option value="Medical Emergency">{t('medicalEmergency')}</option><option value="Power Outage">{t('powerOutage')}</option><option value="Hazardous Spill">{t('hazardousSpill')}</option><option value="Other">{t('other')}</option></select></div>
                                     <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('description')}</label><textarea className="w-full p-2.5 rounded border text-sm" value={editData.description} onChange={e => setEditData({...editData, description: e.target.value})} rows={3} /></div>
                                     
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -572,8 +572,8 @@ const Admin: React.FC = () => {
                                         <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('contactPhoneLabel')}</label><input type="text" className="w-full p-2.5 rounded border text-sm bg-white" value={editData.contactPhone || ''} onChange={e => setEditData({...editData, contactPhone: e.target.value})} /></div>
                                     </div>
                                     
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('urgencyLabel')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.urgency} onChange={e => setEditData({...editData, urgency: e.target.value as any})}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('incidentLocation')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.department} onChange={e => setEditData({...editData, department: e.target.value})}><option>Main Building</option><option>Office</option><option>Company Compound</option><option>Warehouse</option><option>Workshop</option><option>Parking Lot</option><option>Factory</option><option>Construction Site</option><option>School</option><option>City Centre</option><option>Highway</option><option>Airport</option><option>Urban Area</option><option>Rural Area</option><option>Other</option></select></div></div>
-                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('status')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})}><option value="pending">{t('pendingStatus')}</option><option value="active">Active</option><option value="approved">{t('approvedStatus')}</option><option value="info_requested">{t('infoRequestedStatus')}</option><option value="resolved">{t('resolvedStatus')}</option></select></div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('urgencyLabel')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.urgency} onChange={e => setEditData({...editData, urgency: e.target.value as any})}><option value="Low">{t('low')}</option><option value="Medium">{t('moderate')}</option><option value="High">{t('high')}</option><option value="Critical">{t('criticalSeverity')}</option></select></div><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('incidentLocation')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.department} onChange={e => setEditData({...editData, department: e.target.value})}><option value="Main Building">{t('mainBuilding')}</option><option value="Office">{t('office')}</option><option value="Company Compound">{t('companyCompound')}</option><option value="Warehouse">{t('warehouse')}</option><option value="Workshop">{t('workshop')}</option><option value="Parking Lot">{t('parkingLot')}</option><option value="Factory">{t('factory')}</option><option value="Construction Site">{t('constructionSite')}</option><option value="School">{t('school')}</option><option value="City Centre">{t('cityCentre')}</option><option value="Highway">{t('highway')}</option><option value="Airport">{t('airport')}</option><option value="Urban Area">{t('urbanArea')}</option><option value="Rural Area">{t('ruralArea')}</option><option value="Other">{t('other')}</option></select></div></div>
+                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('status')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})}><option value="pending">{t('pendingStatus')}</option><option value="active">{t('active')}</option><option value="approved">{t('approvedStatus')}</option><option value="info_requested">{t('infoRequestedStatus')}</option><option value="resolved">{t('resolvedStatus')}</option></select></div>
                                 </div>
                             ) : (
                                 <>

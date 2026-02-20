@@ -27,6 +27,7 @@ import QRScanner from './components/QRScanner';
 import Footer from './components/Footer';
 import { Icons } from './components/Icon';
 import { ThemeSettings as ThemeSettingsType, User } from './types';
+import { getInstallPromptAvailable, installPWA } from './pwa-install';
 
 /** Tabs that show back button and hide footer/bottom nav (Learn, Settings, Privacy, Profile show Footer) */
 const BACK_ENABLED_TABS = ['admin', 'resources', 'notifications', 'directory'] as const;
@@ -71,6 +72,10 @@ const AppContent: React.FC = () => {
     const [activeTab, setActiveTab] = useState('home');
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
     const [notificationCount, setNotificationCount] = useState(3); // Demo notification count
+    const [installAvailable, setInstallAvailable] = useState(getInstallPromptAvailable);
+    const [installBannerDismissed, setInstallBannerDismissed] = useState(() =>
+        typeof sessionStorage !== 'undefined' && sessionStorage.getItem('safesphere-install-banner-dismissed') === '1'
+    );
 
     // -- Effects --
     useEffect(() => {
@@ -91,6 +96,13 @@ const AppContent: React.FC = () => {
             setActiveTab('home');
         }
     }, [activeTab]);
+
+    // PWA install prompt available (e.g. Android/Chrome)
+    useEffect(() => {
+        const onAvailable = () => setInstallAvailable(true);
+        window.addEventListener('safesphere-install-available', onAvailable);
+        return () => window.removeEventListener('safesphere-install-available', onAvailable);
+    }, []);
 
     // Resolve effective dark mode (light/dark/system)
     const effectiveDarkMode = theme.themeMode === 'system'
@@ -171,6 +183,7 @@ const AppContent: React.FC = () => {
     };
 
     const handleLogout = () => {
+        setSidebarOpen(false);
         if (confirm(t('signOutConfirm'))) {
             logout();
             setActiveTab('home');
@@ -278,6 +291,33 @@ const AppContent: React.FC = () => {
                 <div className="bg-gray-800 text-white text-xs py-1 px-4 text-center flex items-center justify-center gap-2 animate-in slide-in-from-top">
                     <Icons.Wifi size={12} className="opacity-50" />
                     <span>{t('offlineBanner')}</span>
+                </div>
+            )}
+
+            {/* Install PWA Banner (one-time dismissible) – text and buttons centred in blue bar */}
+            {installAvailable && !installBannerDismissed && !window.matchMedia('(display-mode: standalone)').matches && (
+                <div className="bg-blue-600 text-white text-sm min-h-[56px] py-4 px-4 flex items-center justify-between gap-3">
+                    <span className="flex-1 min-w-0 leading-snug">{t('installBannerMessage')}</span>
+                    <div className="flex items-center gap-2 shrink-0 self-center">
+                        <button
+                            type="button"
+                            onClick={() => installPWA()}
+                            className="px-3 py-2 rounded-lg bg-white text-blue-600 font-semibold text-xs"
+                        >
+                            {t('installApp')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                try { sessionStorage.setItem('safesphere-install-banner-dismissed', '1'); } catch {}
+                                setInstallBannerDismissed(true);
+                            }}
+                            className="px-3 py-2 rounded-lg bg-white/20 text-white font-medium text-xs"
+                            aria-label={t('installBannerLater')}
+                        >
+                            {t('installBannerLater')}
+                        </button>
+                    </div>
                 </div>
             )}
 

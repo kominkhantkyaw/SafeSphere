@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icons } from '../components/Icon';
 import { useUser } from '../contexts/UserContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { installPWA, getInstallPromptAvailable, syncInstallButtonVisibility } from '../pwa-install';
 
 interface MenuProps {
     onNavigate: (page: string) => void;
@@ -9,9 +10,20 @@ interface MenuProps {
     onBack?: () => void;
 }
 
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isStandalone = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true);
+
 const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack }) => {
     const { user, logout } = useUser();
     const { t } = useLanguage();
+    const [installAvailable, setInstallAvailable] = useState(getInstallPromptAvailable);
+
+    useEffect(() => {
+        syncInstallButtonVisibility();
+        const onAvailable = () => setInstallAvailable(true);
+        window.addEventListener('safesphere-install-available', onAvailable);
+        return () => window.removeEventListener('safesphere-install-available', onAvailable);
+    }, []);
 
     if (!user) return null;
 
@@ -190,6 +202,36 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
                     </button>
                 </div>
 
+                {/* Install App */}
+                {(installAvailable || (isIOS && !isStandalone)) && (
+                    <div className="bg-white rounded-2xl shadow-lg overflow-hidden divide-y divide-gray-100">
+                        {installAvailable ? (
+                            <button
+                                id="installBtn"
+                                onClick={() => installPWA()}
+                                className={`w-full flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors ${installAvailable ? '' : 'hidden'}`}
+                                aria-label={t('installApp')}
+                            >
+                                <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                                    <Icons.Download size={20} />
+                                </div>
+                                <span className="flex-1 text-left font-medium text-gray-900">
+                                    {t('installApp')}
+                                </span>
+                                <Icons.ChevronRight size={20} className="text-gray-400" />
+                            </button>
+                        ) : (
+                            <div className="p-4">
+                                <p className="font-medium text-gray-900 flex items-center gap-2">
+                                    <Icons.Download size={20} className="text-blue-600" />
+                                    {t('installAppIosHint')}
+                                </p>
+                                <p className="text-sm text-gray-500 mt-2">{t('installAppIosInstructions')}</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Menu Items */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden divide-y divide-gray-100">
                     {menuItems.map((item) => {
@@ -235,8 +277,10 @@ const Menu: React.FC<MenuProps> = ({ onNavigate, onThemeSettingsClick, onBack })
                 {/* Logout Button */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     <button
+                        type="button"
                         onClick={handleLogout}
                         className="w-full flex items-center justify-center gap-2 p-4 text-red-600 hover:bg-red-50 transition-colors"
+                        aria-label={t('logOut')}
                     >
                         <Icons.LogOut size={20} />
                         <span className="font-semibold">{t('logOut')}</span>

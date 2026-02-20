@@ -1,34 +1,62 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Icons } from '../components/Icon';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getAiSafetyReply, isAiChatAvailable } from '../services/aiChat';
+import { getAiSafetyReply, isAiChatAvailable, QUOTA_EXCEEDED_MESSAGE } from '../services/aiChat';
 
 type MessageType = 'text' | 'image' | 'file' | 'voice' | 'location';
 
-// International SOS emoji signs - universally recognisable, no typing needed
+// International urgent-help signs (~50) – universally recognisable, no typing needed
 const SOS_EMOJIS = [
-    { emoji: '🆘', labelKey: 'UrgentHelp' },
-    { emoji: '⚠️', labelKey: 'Warning' },
-    { emoji: '🏥', labelKey: 'Medical' },
-    { emoji: '🚒', labelKey: 'FireTruck' },
-    { emoji: '💧', labelKey: 'Flood' },
-    { emoji: '🌍', labelKey: 'Earthquake' },
-    { emoji: '👍', labelKey: 'Ok' },
-    { emoji: '🏠', labelKey: 'Shelter' },
-    { emoji: '🔌', labelKey: 'NoElectricity' },
-    { emoji: '📵', labelKey: 'NoInternet' },
-    { emoji: '🤕', labelKey: 'Wounded' },
-    { emoji: '🤐', labelKey: 'CannotSpeak' },
-    { emoji: '🚪', labelKey: 'Trapped' },
-    { emoji: '🚰', labelKey: 'NeedWater' },
-    { emoji: '🍞', labelKey: 'NeedFood' },
-    { emoji: '☢️', labelKey: 'Chemical' },
-    { emoji: '☠️', labelKey: 'Poison' },
-    { emoji: '🔫', labelKey: 'ShooterActive' },
-    { emoji: '👮', labelKey: 'Police' },
-    { emoji: '🚑', labelKey: 'Ambulance' },
-    { emoji: '🚨', labelKey: 'Emergency' },
-    { emoji: '🛩️', labelKey: 'Drone'},
+    { emoji: '🆘', labelKey: 'emojiUrgentHelp' },
+    { emoji: '⚠️', labelKey: 'emojiWarning' },
+    { emoji: '🏥', labelKey: 'emojiMedical' },
+    { emoji: '🚒', labelKey: 'emojiFireTruck' },
+    { emoji: '💧', labelKey: 'emojiFlood' },
+    { emoji: '🌍', labelKey: 'emojiEarthquake' },
+    { emoji: '👍', labelKey: 'emojiOk' },
+    { emoji: '🏠', labelKey: 'emojiShelter' },
+    { emoji: '🔌', labelKey: 'emojiNoElectricity' },
+    { emoji: '📵', labelKey: 'emojiNoInternet' },
+    { emoji: '🤕', labelKey: 'emojiWounded' },
+    { emoji: '🤐', labelKey: 'emojiCannotSpeak' },
+    { emoji: '🚪', labelKey: 'emojiTrapped' },
+    { emoji: '🚰', labelKey: 'emojiNeedWater' },
+    { emoji: '🍞', labelKey: 'emojiNeedFood' },
+    { emoji: '☢️', labelKey: 'emojiChemical' },
+    { emoji: '☠️', labelKey: 'emojiPoison' },
+    { emoji: '🔫', labelKey: 'emojiShooterActive' },
+    { emoji: '👮', labelKey: 'emojiPolice' },
+    { emoji: '🚑', labelKey: 'emojiAmbulance' },
+    { emoji: '🚨', labelKey: 'emojiEmergency' },
+    { emoji: '🛩️', labelKey: 'emojiDrone' },
+    { emoji: '🌊', labelKey: 'emojiTsunami' },
+    { emoji: '⛽', labelKey: 'emojiGasLeak' },
+    { emoji: '🏚️', labelKey: 'emojiCollapse' },
+    { emoji: '⛈️', labelKey: 'emojiStorm' },
+    { emoji: '🌪️', labelKey: 'emojiTornado' },
+    { emoji: '🩹', labelKey: 'emojiFirstAid' },
+    { emoji: '🩸', labelKey: 'emojiBleeding' },
+    { emoji: '❤️‍🩹', labelKey: 'emojiHeartAttack' },
+    { emoji: '😵', labelKey: 'emojiChoking' },
+    { emoji: '💊', labelKey: 'emojiNeedMedicine' },
+    { emoji: '♿', labelKey: 'emojiDisabledAccess' },
+    { emoji: '👶', labelKey: 'emojiChild' },
+    { emoji: '👴', labelKey: 'emojiElderly' },
+    { emoji: '🏃', labelKey: 'emojiEvacuate' },
+    { emoji: '✅', labelKey: 'emojiSafe' },
+    { emoji: '⛔', labelKey: 'emojiDanger' },
+    { emoji: '💥', labelKey: 'emojiExplosion' },
+    { emoji: '🌋', labelKey: 'emojiVolcano' },
+    { emoji: '🔥', labelKey: 'emojiFire' },
+    { emoji: '🌀', labelKey: 'emojiCyclone' },
+    { emoji: '❄️', labelKey: 'emojiCold' },
+    { emoji: '🌡️', labelKey: 'emojiHeatwave' },
+    { emoji: '🗺️', labelKey: 'emojiLost' },
+    { emoji: '🐻', labelKey: 'emojiAnimal' },
+    { emoji: '🏊', labelKey: 'emojiDrowning' },
+    { emoji: '⚡', labelKey: 'emojiPowerDown' },
+    { emoji: '🧣', labelKey: 'emojiNeedBlanket' },
+    { emoji: '🙋', labelKey: 'emojiNeedRescue' },
 ] as const;
 
 
@@ -127,7 +155,7 @@ const Chat: React.FC = () => {
         const teamName = selectedChat?.name || 'Team';
         const isAiChat = selectedChat?.isAi === true;
         const content = isAiChat
-            ? 'The AI assistant couldn\'t generate a response right now. Please try again in a moment or check the browser console (F12) for details.'
+            ? (isAiChatAvailable() ? t('chatAiErrorUnavailable') : t('chatAiNotConfigured'))
             : [
                 'Thanks for your message. Our team will respond shortly.',
                 'We\'ve received your message. A responder will get back to you soon.',
@@ -141,7 +169,7 @@ const Chat: React.FC = () => {
                 return { ...prev, [convId]: [...conv, { id: replyId, sender: teamName, content, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
             });
         }, 1200);
-    }, [selectedChat]);
+    }, [selectedChat, t]);
 
     const getReply = useCallback(async (convId: number, afterId: number, userMessageContent: string) => {
         const senderName = selectedChat?.name || 'Team';
@@ -157,33 +185,31 @@ const Chat: React.FC = () => {
                 const reply = await getAiSafetyReply({ userMessage: userMessageContent, conversationHistory: history });
                 setAiTyping(false);
                 if (reply) {
+                    const displayText = reply === QUOTA_EXCEEDED_MESSAGE ? t('chatAiErrorQuota') : reply;
                     setMessagesByConversation(prev => {
                         const c = prev[convId] || [];
                         const replyId = Math.max(0, ...c.map(m => m.id), afterId) + 1;
-                        return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
+                        return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: displayText, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
                     });
                 } else {
-                    // AI failed to respond – show AI-specific message (check console for [AI Chat] errors)
-                    const fallback = 'The AI assistant couldn\'t generate a response right now. Please check your connection, try again in a moment, or see the browser console (F12) for details.';
                     setMessagesByConversation(prev => {
                         const c = prev[convId] || [];
                         const replyId = Math.max(0, ...c.map(m => m.id), afterId) + 1;
-                        return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: fallback, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
+                        return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: t('chatAiErrorUnavailable'), timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
                     });
                 }
             } catch {
                 setAiTyping(false);
-                const fallback = 'The AI assistant couldn\'t generate a response right now. Please try again or check the browser console (F12) for errors.';
                 setMessagesByConversation(prev => {
                     const c = prev[convId] || [];
                     const replyId = Math.max(0, ...c.map(m => m.id), afterId) + 1;
-                    return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: fallback, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
+                    return { ...prev, [convId]: [...c, { id: replyId, sender: senderName, content: t('chatAiErrorUnavailable'), timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), isOwn: false } as Message] };
                 });
             }
         } else {
             simulateReply(convId, afterId);
         }
-    }, [selectedChat, messagesByConversation, simulateReply]);
+    }, [selectedChat, messagesByConversation, simulateReply, t]);
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -366,7 +392,7 @@ const Chat: React.FC = () => {
                         <h1 className="font-semibold text-gray-900 truncate">{selectedChat.nameKey ? t(selectedChat.nameKey) : selectedChat.name}</h1>
                         <p className="text-xs text-gray-500">
                             {selectedChat.isAi
-                                ? (isAiChatAvailable() ? 'AI connected • Ready' : 'AI offline • Add VITE_GEMINI_API_KEY to .env.local')
+                                ? (isAiChatAvailable() ? t('aiConnectedReady') : t('aiOffline'))
                                 : (selectedChat.online ? 'Online' : 'Offline')}
                         </p>
                     </div>
@@ -396,6 +422,14 @@ const Chat: React.FC = () => {
                     <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
                         <Icons.Info size={16} className="text-amber-600 shrink-0" />
                         <p className="text-xs text-amber-800">{t('aiUnavailableFallback')}</p>
+                    </div>
+                )}
+
+                {/* AI not configured – show before user sends a message */}
+                {selectedChat?.isAi && !isAiChatAvailable() && (
+                    <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
+                        <Icons.Info size={16} className="text-amber-600 shrink-0" />
+                        <p className="text-xs text-amber-800">{t('chatAiNotConfigured')}</p>
                     </div>
                 )}
 
@@ -442,7 +476,7 @@ const Chat: React.FC = () => {
                                             className="flex items-center gap-2 text-sm underline"
                                         >
                                             <Icons.MapPin size={18} />
-                                            View location on map
+                                            {t('viewOnMap')}
                                         </a>
                                     )}
                                     {(message.type === 'text' || !message.type) && <p className="text-sm">{message.content}</p>}
@@ -483,8 +517,8 @@ const Chat: React.FC = () => {
                         aria-label="Attach file"
                     />
                     {showEmojiPicker && (
-                        <div className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-2xl shadow-lg border border-gray-200 p-3 z-20">
-                            <div className="flex items-center justify-between mb-2">
+                        <div className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-2xl shadow-lg border border-gray-200 p-3 z-20 max-h-[70vh] flex flex-col">
+                            <div className="flex items-center justify-between mb-2 shrink-0">
                                 <span className="text-xs font-medium text-gray-500">{t('sosSigns')}</span>
                                 <button
                                     type="button"
@@ -498,12 +532,12 @@ const Chat: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={handleUrgentHelp}
-                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm mb-3"
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm mb-3 shrink-0"
                             >
                                 <span>🆘</span>
                                 <span>{t('urgentHelp')}</span>
                             </button>
-                            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                            <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 overflow-y-auto min-h-0">
                                 {SOS_EMOJIS.map(({ emoji, labelKey }) => (
                                     <button
                                         key={emoji}

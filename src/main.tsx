@@ -4,6 +4,9 @@ import './styles/index.css';
 import App from './App';
 import './pwa-install'; // PWA install prompt handler
 
+// Register PWA service worker for offline/install (production build)
+import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true })).catch(() => {});
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

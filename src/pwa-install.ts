@@ -16,7 +16,18 @@ window.addEventListener('beforeinstallprompt', (event: Event) => {
   event.preventDefault();
   deferredPrompt = event as BeforeInstallPromptEvent;
   showInstallButton();
+  window.dispatchEvent(new CustomEvent('safesphere-install-available'));
 });
+
+/** Whether the browser has offered the install prompt (e.g. Android/Chrome). */
+export function getInstallPromptAvailable(): boolean {
+  return !!deferredPrompt;
+}
+
+/** Call when the install button is in the DOM (e.g. Menu mounted) to show it if the prompt was already captured. */
+export function syncInstallButtonVisibility(): void {
+  if (deferredPrompt) showInstallButton();
+}
 
 /** Trigger the install prompt from a custom button */
 export async function installPWA(): Promise<void> {

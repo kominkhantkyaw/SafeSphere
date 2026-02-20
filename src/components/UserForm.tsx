@@ -245,7 +245,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                     </h3>
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email</label>
-                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 rounded-lg border text-sm" />
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 rounded-lg border text-sm" placeholder="name@safesphere.app" />
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Phone</label>

@@ -8,10 +8,17 @@ build/
 coverage/
 stats.html
 
-# ── Environment / Secrets ─────────────────────────
+# ── Environment / Secrets (never commit API keys or secrets) ─
 .env
 .env.*
 !.env.example
+.env.local
+.env.production.local
+*.pem
+secrets/
+**/api-key*
+**/apiKey*
+**/apikey*
 
 # ── Documentation & reports (keep locally only) ──
 docs/

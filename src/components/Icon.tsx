@@ -92,7 +92,8 @@ import {
     Siren,
     House,
     PanelLeft,
-    RefreshCw
+    RefreshCw,
+    Link
 } from 'lucide-react';
 
 export const Icons = {
@@ -191,5 +192,6 @@ export const Icons = {
     Smile,
     Siren,
     PanelLeft,
-    RefreshCw
+    RefreshCw,
+    Link
 };

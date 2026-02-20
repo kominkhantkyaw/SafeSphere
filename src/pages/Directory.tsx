@@ -99,7 +99,7 @@ const Directory: React.FC<DirectoryProps> = ({ onBack }) => {
         },
         {
             id: 't2',
-            name: 'Sarah Chen',
+            name: 'Christina Chen',
             role: 'First Responder',
             callSign: 'Bravo-2',
             email: 'sarah.chen@safesphere.app',

@@ -777,7 +777,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                         const sevRange = getSeverityRange(magVal);
                                         return (
                                             <g key={magVal} title={`${sevLabel} (${sevRange})`}>
-                                                <line x1={chartLeft} y1={y} x2={chartRight} y2={y} stroke="rgba(148,163,184,0.35)" strokeWidth="0.5" />
+                                                <line x1={chartLeft} y1={y} x2={chartRight} y2={y} stroke="rgba(148,163,184,0.25)" strokeWidth="0.4" />
                                                 <text x={chartLeft - 6} y={y + 3} textAnchor="end" fill="#475569" fontSize="9" fontWeight="600">{magVal.toFixed(1)}M</text>
                                             </g>
                                         );
@@ -786,11 +786,11 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                     {xLabels.map((_, i) => {
                                         const x = chartLeft + (i / divisor) * (chartRight - chartLeft);
                                         return (
-                                            <line key={i} x1={x} y1={chartTop} x2={x} y2={chartBottom} stroke="rgba(148,163,184,0.2)" strokeWidth="0.5" />
+                                            <line key={i} x1={x} y1={chartTop} x2={x} y2={chartBottom} stroke="rgba(148,163,184,0.15)" strokeWidth="0.4" />
                                         );
                                     })}
-                                    {/* Dotted line - sound wave form */}
-                                    <polyline fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 5" points={linePoints} />
+                                    {/* Dotted line - sound wave form (thin stroke for user-friendly look) */}
+                                    <polyline fill="none" stroke="rgba(249,115,22,0.7)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 4" points={linePoints} />
                                     {/* Tiny data points - click to view location on map; show magnitude (e.g. 6.4M) for 24h, 7d, 1M, and sampled for 1Y */}
                                     {pts.map(([x, y, p], i) => {
                                         const pTime = (p as { time?: number }).time;
@@ -814,7 +814,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                         const hasLocation = p.lat != null && p.lng != null;
                                         return (
                                             <g key={i} className={hasLocation ? 'cursor-pointer' : ''} onClick={() => hasLocation && handlePointClick(p)}>
-                                                <circle cx={x} cy={y} r="1.5" fill="#f97316" stroke="none" />
+                                                <circle cx={x} cy={y} r="1.25" fill="#f97316" stroke="none" />
                                                 {showLabel && (
                                                     <text x={x} y={y - 6} textAnchor="middle" fill="#334155" fontSize="7" fontWeight="600">{p.mag.toFixed(1)}M</text>
                                                 )}

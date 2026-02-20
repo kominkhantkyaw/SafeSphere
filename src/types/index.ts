@@ -183,7 +183,7 @@ export interface EarthquakeEvent {
 
 export interface SafetyAsset {
     id: number;
-    type: 'extinguisher' | 'exit' | 'meeting_point' | 'route' | 'road' | 'hydrant';
+    type: 'extinguisher' | 'exit' | 'meeting_point' | 'route' | 'road' | 'hydrant' | 'connector';
     lat: number;
     lng: number;
     label?: string;

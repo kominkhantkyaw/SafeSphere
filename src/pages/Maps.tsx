@@ -57,7 +57,7 @@ const MYANMAR_CENTER: [number, number] = [21.0, 96.0];
 const YANGON_OPS: [number, number] = [16.855, 96.195];
 
 const Maps: React.FC = () => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<any>(null);
     const markersRef = useRef<any[]>([]);
@@ -594,20 +594,22 @@ const Maps: React.FC = () => {
 
             filteredAssets.forEach(asset => {
                 if ((asset.type === 'route' || asset.type === 'road') && asset.routePoints) {
-                    const color = asset.type === 'road' ? '#9ca3af' : '#22c55e'; // Gray vs Green
+                    const color = asset.type === 'road' ? '#9ca3af' : '#22c55e';
                     const dashArray = asset.type === 'road' ? undefined : '10, 10';
                     const weight = asset.type === 'road' ? 6 : 4;
-                    
-                    const line = window.L.polyline(asset.routePoints, {
-                        color: color,
-                        weight: weight,
-                        dashArray: dashArray,
-                        opacity: 0.8
-                    }).bindTooltip(asset.label, { sticky: true })
-                    .bindPopup(`<b>${asset.label}</b><br>${asset.type === 'road' ? 'Transport Road' : 'Evacuation Route'}`)
-                    .addTo(mapInstance.current);
+                    const line = window.L.polyline(asset.routePoints, { color, weight, dashArray, opacity: 0.8 })
+                        .bindTooltip(asset.label, { sticky: true })
+                        .bindPopup(`<b>${asset.label}</b><br>${asset.type === 'road' ? t('transportRoad') : t('evacRoute')}`)
+                        .addTo(mapInstance.current);
                     markersRef.current.push(line);
-                } else {
+                } else if (asset.type === 'connector' && asset.routePoints && asset.routePoints.length >= 2) {
+                    const color = asset.color || '#3b82f6';
+                    const line = window.L.polyline(asset.routePoints, { color, weight: 5, opacity: 0.9 })
+                        .bindTooltip(asset.label, { sticky: true })
+                        .bindPopup(`<b>${asset.label || t('connectorLine')}</b>`)
+                        .addTo(mapInstance.current);
+                    markersRef.current.push(line);
+                } else if (asset.type === 'extinguisher' || asset.type === 'exit' || asset.type === 'meeting_point' || asset.type === 'hydrant') {
                     let iconHtml = '';
                     let bgClass = '';
                     switch(asset.type) {
@@ -696,13 +698,13 @@ const Maps: React.FC = () => {
                      opacity: 0,
                      fillOpacity: 0.3,
                      className: 'heat-blur'
-                 }).bindPopup(`High Incident Density Area`);
+                 }).bindPopup(t('highIncidentDensity'));
                  heatCircle.addTo(mapInstance.current);
                  markersRef.current.push(heatCircle);
              });
         }
 
-    }, [activeLayers, buildingFilter, earthquakes, safetyAssets, filteredReportsForMap, filteredResourcesForMap, nearbyFilter, userLoc]);
+    }, [activeLayers, buildingFilter, earthquakes, safetyAssets, filteredReportsForMap, filteredResourcesForMap, nearbyFilter, userLoc, language]);
 
     // --- TACTICAL SIMULATION LAYERS ---
     useEffect(() => {

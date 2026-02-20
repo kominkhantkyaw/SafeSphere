@@ -19,9 +19,9 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
     const { language, setLanguage, t } = useLanguage();
     const [activeTab, setActiveTab] = useState<'account' | 'notifications' | 'privacy' | 'security'>('account');
     
-    // Language change confirmation
+    // Language & theme – draft until Save is clicked
     const [pendingLanguage, setPendingLanguage] = useState<'en' | 'de' | 'my' | null>(null);
-    const [showLanguageConfirm, setShowLanguageConfirm] = useState(false);
+    const [showSavedMessage, setShowSavedMessage] = useState(false);
     
     // Theme mode - draft until saved (uses app theme when available)
     const [pendingThemeMode, setPendingThemeMode] = useState<ThemeMode | null>(null);
@@ -174,15 +174,25 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
         onNavigate?.('home');
     };
 
-    // Save theme mode - applies and clears pending
-    const handleSaveThemeMode = () => {
-        if (!onThemeUpdate || !appTheme) return;
-        onThemeUpdate({ ...appTheme, themeMode: effectiveThemeMode });
-        setPendingThemeMode(null);
-    };
-
     const handleThemeModeSelect = (mode: ThemeMode) => {
         setPendingThemeMode(mode);
+    };
+
+    const savedThemeMode: ThemeMode = appTheme?.themeMode ?? (typeof appTheme?.darkMode === 'boolean' ? (appTheme.darkMode ? 'dark' : 'light') : 'system');
+    const hasPreferencesChanges =
+        (pendingLanguage !== null && pendingLanguage !== language) || pendingThemeMode !== null;
+
+    const handleSavePreferences = () => {
+        if (pendingLanguage !== null && pendingLanguage !== language) {
+            setLanguage(pendingLanguage);
+            setPendingLanguage(null);
+        }
+        if (pendingThemeMode !== null && onThemeUpdate && appTheme) {
+            onThemeUpdate({ ...appTheme, themeMode: pendingThemeMode });
+            setPendingThemeMode(null);
+        }
+        setShowSavedMessage(true);
+        setTimeout(() => setShowSavedMessage(false), 2500);
     };
 
     const handlePasswordChange = (e: React.FormEvent) => {
@@ -211,27 +221,8 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
         }, 500);
     };
 
-    // Handle language change request
-    const handleLanguageChangeRequest = (newLanguage: 'en' | 'de' | 'my') => {
-        if (newLanguage !== language) {
-            setPendingLanguage(newLanguage);
-            setShowLanguageConfirm(true);
-        }
-    };
-
-    // Confirm language change
-    const handleLanguageConfirm = () => {
-        if (pendingLanguage) {
-            setLanguage(pendingLanguage);
-            setShowLanguageConfirm(false);
-            setPendingLanguage(null);
-        }
-    };
-
-    // Cancel language change
-    const handleLanguageCancel = () => {
-        setShowLanguageConfirm(false);
-        setPendingLanguage(null);
+    const handleLanguageSelect = (newLanguage: 'en' | 'de' | 'my') => {
+        setPendingLanguage(newLanguage);
     };
 
     return (
@@ -334,18 +325,24 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <Icons.Globe size={20} className="text-gray-500" />
                                         <div>
                                             <div className="font-semibold text-gray-900">{t('language')}</div>
-                                            <div className="text-sm text-gray-500">{t('selectLanguage')}</div>
+                                            <div className="text-sm text-gray-500">{t('selectLanguage')}. {t('saveToApply')}</div>
                                         </div>
                                     </div>
                                     <select 
-                                        value={language}
-                                        onChange={(e) => handleLanguageChangeRequest(e.target.value as 'en' | 'de' | 'my')}
+                                        value={pendingLanguage ?? language}
+                                        onChange={(e) => handleLanguageSelect(e.target.value as 'en' | 'de' | 'my')}
                                         className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        aria-label={t('language')}
                                     >
                                         <option value="en">🇬🇧 {t('english')}</option>
                                         <option value="de">🇩🇪 {t('german')}</option>
                                         <option value="my">🇲🇲 {t('myanmar')}</option>
                                     </select>
+                                    {language && (
+                                        <p className="mt-1.5 text-xs text-gray-500">
+                                            {t('current')}: {language === 'en' ? t('english') : language === 'de' ? t('german') : t('myanmar')}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {/* Time Zone Selection */}
@@ -386,13 +383,13 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                     </select>
                                 </div>
 
-                                {/* Theme Mode Selection - selectable like Language and Time Zone */}
+                                {/* Theme Mode Selection */}
                                 <div className="border-t border-gray-100 pt-4">
                                     <div className="flex items-center gap-3 mb-3">
                                         <Icons.Palette size={20} className="text-gray-500" />
                                         <div>
                                             <div className="font-semibold text-gray-900">{t('themeMode')}</div>
-                                            <div className="text-sm text-gray-500">Light, dark, or follow your device. Tap Save to apply.</div>
+                                            <div className="text-sm text-gray-500">{t('saveToApply')}</div>
                                         </div>
                                     </div>
                                     <select
@@ -405,6 +402,9 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <option value="dark">🌙 {t('dark')}</option>
                                         <option value="system">💻 {t('system')}</option>
                                     </select>
+                                    <p className="mt-1.5 text-xs text-gray-500">
+                                        {t('current')}: {savedThemeMode === 'light' ? t('light') : savedThemeMode === 'dark' ? t('dark') : t('system')}
+                                    </p>
                                     {onThemeSettingsClick && (
                                         <button 
                                             type="button"
@@ -415,16 +415,35 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                             Customise colours & more
                                         </button>
                                     )}
-                                    {onThemeUpdate && appTheme && pendingThemeMode !== null && (
-                                        <button 
-                                            type="button"
-                                            onClick={handleSaveThemeMode}
-                                            className="mt-3 w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-                                        >
-                                            Save theme
-                                        </button>
-                                    )}
                                 </div>
+
+                                {/* Save preferences (Language + Theme) */}
+                                {hasPreferencesChanges && (
+                                    <div className="border-t border-gray-100 pt-4 space-y-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleSavePreferences}
+                                            className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <Icons.CheckCircle size={20} />
+                                            {t('save')}
+                                        </button>
+                                        {showSavedMessage && (
+                                            <p className="text-center text-sm text-green-600 font-medium flex items-center justify-center gap-1.5" role="status">
+                                                <Icons.CheckCircle size={18} />
+                                                {t('settingsSaved')}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {showSavedMessage && !hasPreferencesChanges && (
+                                    <div className="border-t border-gray-100 pt-4">
+                                        <p className="text-center text-sm text-green-600 font-medium flex items-center justify-center gap-1.5" role="status">
+                                            <Icons.CheckCircle size={18} />
+                                            {t('settingsSaved')}
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* Location Services Toggle */}
                                 <div className="border-t border-gray-100 pt-4">
@@ -485,7 +504,7 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                             </div>
                             
                             <p className="text-gray-600 text-sm mb-4">
-                                Having trouble with SafeSphere? Our technical support team is here to help you 24/7.
+                                {t('helpSupportIntro')}
                             </p>
 
                             <div className="space-y-3">
@@ -498,7 +517,7 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <Icons.Mail size={20} className="text-white" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-semibold text-gray-900 group-hover:text-blue-600">Email Support</div>
+                                        <div className="font-semibold text-gray-900 group-hover:text-blue-600">{t('emailSupport')}</div>
                                         <div className="text-sm text-gray-600">support@safesphere.app</div>
                                     </div>
                                     <Icons.ChevronRight size={20} className="text-gray-400" />
@@ -513,8 +532,8 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <Icons.MessageCircle size={20} className="text-white" />
                                     </div>
                                     <div className="flex-1 text-left">
-                                        <div className="font-semibold text-gray-900 group-hover:text-green-600">Live Chat</div>
-                                        <div className="text-sm text-gray-600">Get instant help from our team</div>
+                                        <div className="font-semibold text-gray-900 group-hover:text-green-600">{t('liveChat')}</div>
+                                        <div className="text-sm text-gray-600">{t('liveChatHelpDesc')}</div>
                                     </div>
                                     <Icons.ChevronRight size={20} className="text-gray-400" />
                                 </button>
@@ -528,7 +547,7 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <Icons.Phone size={20} className="text-white" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-semibold text-gray-900 group-hover:text-purple-600">Phone Support</div>
+                                        <div className="font-semibold text-gray-900 group-hover:text-purple-600">{t('phoneSupport')}</div>
                                         <div className="text-sm text-gray-600">+1 (800) 523-3773 (24/7)</div>
                                     </div>
                                     <Icons.ChevronRight size={20} className="text-gray-400" />
@@ -543,8 +562,8 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <Icons.FileText size={20} className="text-white" />
                                     </div>
                                     <div className="flex-1 text-left">
-                                        <div className="font-semibold text-gray-900 group-hover:text-amber-600">Documentation</div>
-                                        <div className="text-sm text-gray-600">Browse user guides & FAQs</div>
+                                        <div className="font-semibold text-gray-900 group-hover:text-amber-600">{t('documentation')}</div>
+                                        <div className="text-sm text-gray-600">{t('documentationDesc')}</div>
                                     </div>
                                     <Icons.ChevronRight size={20} className="text-gray-400" />
                                 </button>
@@ -555,9 +574,9 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                 <div className="flex items-start gap-2">
                                     <Icons.Clock size={18} className="text-blue-600 mt-0.5" />
                                     <div>
-                                        <p className="text-sm font-semibold text-gray-900">Average Response Time</p>
+                                        <p className="text-sm font-semibold text-gray-900">{t('averageResponseTime')}</p>
                                         <p className="text-xs text-gray-600 mt-1">
-                                            Email: Within 2 hours • Live Chat: Instant • Phone: Immediate
+                                            {t('responseTimeDetails')}
                                         </p>
                                     </div>
                                 </div>
@@ -1140,96 +1159,7 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                 )}
             </div>
 
-            {/* Language Change Confirmation Modal */}
-            {showLanguageConfirm && (
-                <>
-                    {/* Backdrop */}
-                    <div 
-                        className="fixed inset-0 bg-black/50 z-50 transition-opacity duration-300"
-                        onClick={handleLanguageCancel}
-                    />
-
-                    {/* Confirmation Dialog */}
-                    <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md z-50">
-                        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
-                            {/* Header */}
-                            <div className="relative p-6 bg-gradient-to-br from-blue-600 to-purple-600 text-white">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                                        <Icons.Globe size={24} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-bold">Change Language</h2>
-                                        <p className="text-sm text-white/80">Confirm language preference</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Content */}
-                            <div className="p-6">
-                                <div className="mb-6">
-                                    <div className="flex items-center justify-center gap-4 mb-4">
-                                        <div className="text-center">
-                                            <div className="text-3xl mb-2">
-                                                {language === 'en' ? '🇬🇧' : language === 'de' ? '🇩🇪' : '🇲🇲'}
-                                            </div>
-                                            <div className="text-sm font-semibold text-gray-900">
-                                                {language === 'en' ? 'English' : language === 'de' ? 'Deutsch' : 'မြန်မာ'}
-                                            </div>
-                                        </div>
-                                        <Icons.ArrowRight size={24} className="text-gray-400" />
-                                        <div className="text-center">
-                                            <div className="text-3xl mb-2">
-                                                {pendingLanguage === 'en' ? '🇬🇧' : pendingLanguage === 'de' ? '🇩🇪' : '🇲🇲'}
-                                            </div>
-                                            <div className="text-sm font-semibold text-gray-900">
-                                                {pendingLanguage === 'en' ? 'English' : pendingLanguage === 'de' ? 'Deutsch' : 'မြန်မာ'}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                                        <div className="flex items-start gap-3">
-                                            <Icons.Info size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                                            <div className="text-sm text-gray-700">
-                                                <p className="font-semibold text-gray-900 mb-1">
-                                                    {language === 'en' ? 'Language Change' : language === 'de' ? 'Sprachwechsel' : 'ဘာသာစကားပြောင်းခြင်း'}
-                                                </p>
-                                                <p>
-                                                    {language === 'en' 
-                                                        ? 'Changing the language will update the entire app interface. You can change it back anytime in Settings.'
-                                                        : language === 'de'
-                                                        ? 'Durch die Änderung der Sprache wird die gesamte App-Oberfläche aktualisiert. Sie können sie jederzeit in den Einstellungen zurückändern.'
-                                                        : 'ဘာသာစကားပြောင်းခြင်းဖြင့် အက်ပ်အင်တာဖေ့စ်အားလုံး အပ်ဒိတ်လုပ်ပါမည်။ ဆက်တင်များတွင် မည်သည့်အချိန်မဆို ပြန်ပြောင်းနိုင်ပါသည်။'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Action Buttons */}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={handleLanguageCancel}
-                                        className="py-3 bg-gray-100 text-gray-900 rounded-xl font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Icons.X size={18} />
-                                        {language === 'en' ? 'Cancel' : language === 'de' ? 'Abbrechen' : 'ပယ်ဖျက်ပါ'}
-                                    </button>
-                                    <button
-                                        onClick={handleLanguageConfirm}
-                                        className="py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Icons.CheckCircle size={18} />
-                                        {language === 'en' ? 'Save' : language === 'de' ? 'Speichern' : 'သိမ်းပါ'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
-        </div>
+            </div>
     );
 };
 

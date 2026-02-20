@@ -116,6 +116,24 @@ See `backend/supabase/README.md` for details.
 
 ---
 
+## Pushing to the repository
+
+Before you push, ensure **no sensitive data** is committed:
+
+- **Do not commit** `.env`, `.env.local`, or any file containing API keys (Supabase, Gemini, etc.)
+- **Do not commit** documents such as `.docx`, `.pdf`, or other confidential reports
+- The repo `.gitignore` already excludes: `.env` files, `*.pdf`, `*.docx`, `secrets/`, and similar
+
+Use `.env.example` (without real keys) as a template for other developers. See **DEPLOY_CHECKLIST.md** for a step-by-step pre-push and Vercel deploy checklist.
+
+### Deploy to Vercel
+
+1. Push your branch; ensure no `.env` or API keys are committed (see above and DEPLOY_CHECKLIST.md).
+2. In the Vercel project: **Settings → Environment Variables**. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `VITE_GEMINI_API_KEY` (values from your own `.env.local`, not from the repo).
+3. Deploy; build uses `npm run build` and output directory `dist` (see `vercel.json`).
+
+---
+
 ## Scripts
 
 | Command                   | Description                         |

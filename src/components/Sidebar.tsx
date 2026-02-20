@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Icons } from './Icon';
 import { useUser } from '../contexts/UserContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -25,6 +25,9 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
     const { user } = useUser();
     const { language, setLanguage, t } = useLanguage();
+    const [pendingLanguage, setPendingLanguage] = useState<'en' | 'de' | 'my' | null>(null);
+    const [pendingThemeMode, setPendingThemeMode] = useState<ThemeMode | null>(null);
+    const [showSavedMessage, setShowSavedMessage] = useState(false);
 
     if (!user) return null;
 
@@ -41,17 +44,34 @@ const Sidebar: React.FC<SidebarProps> = ({
     };
 
     const handleLogout = () => {
-        onLogout();
         onClose();
+        onLogout();
     };
 
-    const themeMode = appTheme?.themeMode ?? 'system';
+    const savedThemeMode: ThemeMode = appTheme?.themeMode ?? (typeof appTheme?.darkMode === 'boolean' ? (appTheme.darkMode ? 'dark' : 'light') : 'system');
+    const effectiveThemeMode = pendingThemeMode ?? savedThemeMode;
+    const hasPreferencesChanges =
+        (pendingLanguage !== null && pendingLanguage !== language) || pendingThemeMode !== null;
 
-    const handleThemeModeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const value = e.target.value as ThemeMode;
-        if (onThemeUpdate && appTheme) {
-            onThemeUpdate({ ...appTheme, themeMode: value });
+    const handleSavePreferences = () => {
+        if (pendingLanguage !== null && pendingLanguage !== language) {
+            setLanguage(pendingLanguage);
+            setPendingLanguage(null);
         }
+        if (pendingThemeMode !== null && onThemeUpdate && appTheme) {
+            onThemeUpdate({ ...appTheme, themeMode: pendingThemeMode });
+            setPendingThemeMode(null);
+        }
+        setShowSavedMessage(true);
+        setTimeout(() => setShowSavedMessage(false), 2500);
+    };
+
+    const handleLanguageSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setPendingLanguage(e.target.value as 'en' | 'de' | 'my');
+    };
+
+    const handleThemeModeSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setPendingThemeMode(e.target.value as ThemeMode);
     };
 
     return (
@@ -166,18 +186,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                         />
                     </nav>
 
-                    {/* Language Section - selectable like Theme Mode */}
+                    {/* Language Section - draft until Save */}
                     <div className="mt-6 mb-4 px-2">
                         <div className="flex items-center gap-3 mb-3">
                             <Icons.Globe size={20} className="text-gray-500 shrink-0" />
                             <div>
                                 <div className="font-semibold text-gray-900 text-sm">{t('language')}</div>
-                                <div className="text-xs text-gray-500">{t('selectLanguage')}</div>
+                                <div className="text-xs text-gray-500">{t('saveToApply')}</div>
                             </div>
                         </div>
                         <select
-                            value={language}
-                            onChange={(e) => setLanguage(e.target.value as 'en' | 'de' | 'my')}
+                            value={pendingLanguage ?? language}
+                            onChange={handleLanguageSelect}
                             aria-label={t('language')}
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
@@ -185,21 +205,24 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <option value="de">🇩🇪 {t('german')}</option>
                             <option value="my">🇲🇲 {t('myanmar')}</option>
                         </select>
+                        <p className="mt-1.5 text-xs text-gray-500">
+                            {t('current')}: {language === 'en' ? t('english') : language === 'de' ? t('german') : t('myanmar')}
+                        </p>
                     </div>
 
-                    {/* Theme Mode Section - selectable like Language / Time Zone */}
+                    {/* Theme Mode Section - draft until Save */}
                     {appTheme && onThemeUpdate && (
                         <div className="mt-6 mb-4 px-2">
                             <div className="flex items-center gap-3 mb-3">
                                 <Icons.Palette size={20} className="text-gray-500 shrink-0" />
                                 <div>
                                     <div className="font-semibold text-gray-900 text-sm">{t('themeMode')}</div>
-                                    <div className="text-xs text-gray-500">{t('chooseAppearance')}</div>
+                                    <div className="text-xs text-gray-500">{t('saveToApply')}</div>
                                 </div>
                             </div>
                             <select
-                                value={themeMode}
-                                onChange={handleThemeModeChange}
+                                value={effectiveThemeMode}
+                                onChange={handleThemeModeSelect}
                                 aria-label={t('themeMode')}
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             >
@@ -207,6 +230,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                                 <option value="dark">🌙 {t('dark')}</option>
                                 <option value="system">💻 {t('system')}</option>
                             </select>
+                            <p className="mt-1.5 text-xs text-gray-500">
+                                {t('current')}: {savedThemeMode === 'light' ? t('light') : savedThemeMode === 'dark' ? t('dark') : t('system')}
+                            </p>
                             {onThemeSettingsClick && (
                                 <button
                                     type="button"
@@ -220,11 +246,41 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                     )}
 
+                    {/* Save Language & Theme (when there are pending changes) */}
+                    {hasPreferencesChanges && (
+                        <div className="mt-4 mb-4 px-2 space-y-2">
+                            <button
+                                type="button"
+                                onClick={handleSavePreferences}
+                                className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Icons.CheckCircle size={20} />
+                                {t('save')}
+                            </button>
+                            {showSavedMessage && (
+                                <p className="text-center text-sm text-green-600 font-medium flex items-center justify-center gap-1.5" role="status">
+                                    <Icons.CheckCircle size={18} />
+                                    {t('settingsSaved')}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    {showSavedMessage && !hasPreferencesChanges && (
+                        <div className="mt-4 mb-4 px-2">
+                            <p className="text-center text-sm text-green-600 font-medium flex items-center justify-center gap-1.5" role="status">
+                                <Icons.CheckCircle size={18} />
+                                {t('settingsSaved')}
+                            </p>
+                        </div>
+                    )}
+
                     {/* Logout Button */}
                     <div className="mt-4">
                         <button
+                            type="button"
                             onClick={handleLogout}
                             className="w-full py-3 px-4 bg-gray-900 text-white rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
+                            aria-label={t('signOut')}
                         >
                             <Icons.LogOut size={20} />
                             {t('signOut')}

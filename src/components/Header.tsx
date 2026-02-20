@@ -44,9 +44,8 @@ const Header: React.FC<HeaderProps> = ({
                 setShowUserMenu(false);
             }
         };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
     }, []);
 
     return (
@@ -128,9 +127,9 @@ const Header: React.FC<HeaderProps> = ({
                         )}
                     </button>
 
-                    {/* Dropdown Menu */}
+                    {/* Dropdown Menu - stop propagation so outside-click uses document, not dropdown */}
                     {showUserMenu && (
-                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50" onClick={(e) => e.stopPropagation()}>
                             {/* User Info */}
                             <div className="px-4 py-3 bg-gradient-to-br from-blue-600 to-blue-800 text-white">
                                 <div className="font-semibold text-sm">{userName || 'User'}</div>
@@ -169,11 +168,13 @@ const Header: React.FC<HeaderProps> = ({
 
                                 {onLogout && (
                                     <button
+                                        type="button"
                                         onClick={() => {
-                                            onLogout();
                                             setShowUserMenu(false);
+                                            onLogout();
                                         }}
                                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors text-left text-red-600"
+                                        aria-label={t('signOut')}
                                     >
                                         <Icons.LogOut size={18} />
                                         <span className="font-medium">{t('signOut')}</span>
