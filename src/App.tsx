@@ -277,7 +277,7 @@ const AppContent: React.FC = () => {
             {isOffline && (
                 <div className="bg-gray-800 text-white text-xs py-1 px-4 text-center flex items-center justify-center gap-2 animate-in slide-in-from-top">
                     <Icons.Wifi size={12} className="opacity-50" />
-                    <span>Offline Mode: Using cached resources</span>
+                    <span>{t('offlineBanner')}</span>
                 </div>
             )}
 

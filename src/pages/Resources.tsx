@@ -208,7 +208,7 @@ const Resources: React.FC = () => {
                     className="px-4 bg-white border border-gray-300 rounded-xl flex items-center justify-center gap-2 font-medium text-sm text-gray-700 whitespace-nowrap min-w-[110px] shadow-sm active:scale-95 transition-all"
                 >
                     {sortBy === 'distance' ? <Icons.MapPin size={16} className="text-blue-600"/> : <Icons.FileText size={16} className="text-gray-500"/>}
-                    <span>Sort: {sortBy === 'distance' ? 'Dist' : 'Name'}</span>
+                    <span>{t('sortPrefix') + ': ' + (sortBy === 'distance' ? t('sortDistance') : t('sortName'))}</span>
                 </button>
             </div>
 
@@ -316,13 +316,13 @@ const Resources: React.FC = () => {
                                 )}
                             </div>
 
-                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">{resource.description || 'No description available.'}</p>
+                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">{resource.description || t('noAdditionalDetails')}</p>
 
                             {/* Capacity Bar */}
                             {(resource.type === 'shelter' || resource.type === 'medical') && resource.capacity && (
                                 <div className="mb-4">
                                     <div className="flex justify-between text-xs mb-1">
-                                        <span className="font-medium text-gray-500">Occupancy</span>
+                                        <span className="font-medium text-gray-500">{t('occupancy')}</span>
                                         <span className={`font-bold ${isFull ? 'text-red-500' : 'text-green-600'}`}>
                                             {resource.occupancy} / {resource.capacity}
                                         </span>
@@ -368,7 +368,7 @@ const Resources: React.FC = () => {
                         </div>
                     );
                 })}
-                {filteredResources.length === 0 && <div className="text-center text-gray-400 py-12">No resources found matching filters.</div>}
+                {filteredResources.length === 0 && <div className="text-center text-gray-400 py-12">{t('noResourcesFound')}</div>}
             </div>
 
             {/* --- DETAILS MODAL --- */}
@@ -408,7 +408,7 @@ const Resources: React.FC = () => {
                                     <span className="text-xs font-bold text-gray-500">
                                         {selectedResource.distanceNum < 1 
                                             ? `${Math.round(selectedResource.distanceNum * 1000)}m` 
-                                            : `${selectedResource.distanceNum.toFixed(1)} km`} away
+                                            : `${selectedResource.distanceNum.toFixed(1)} km`} {t('awayLabel')}
                                     </span>
                                 )}
                             </div>
@@ -447,23 +447,23 @@ const Resources: React.FC = () => {
                                 )}
                                 
                                 <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-700">
-                                    <h4 className="font-bold text-xs text-gray-400 uppercase mb-1">Details</h4>
-                                    {selectedResource.description || 'No additional details provided.'}
+                                    <h4 className="font-bold text-xs text-gray-400 uppercase mb-1">{t('detailsSection')}</h4>
+                                    {selectedResource.description || t('noAdditionalDetails')}
                                 </div>
 
                                 {selectedResource.notes && (
                                     <div className="p-4 bg-yellow-50 rounded-xl text-sm text-gray-700 border border-yellow-100">
-                                        <h4 className="font-bold text-xs text-yellow-600 uppercase mb-1">Admin Notes</h4>
+                                        <h4 className="font-bold text-xs text-yellow-600 uppercase mb-1">{t('adminNotes')}</h4>
                                         {selectedResource.notes}
                                     </div>
                                 )}
 
                                 {(selectedResource.contactPerson || selectedResource.contactPhone) && (
                                     <div className="p-4 bg-blue-50 rounded-xl text-sm border border-blue-100">
-                                        <h4 className="font-bold text-xs text-blue-600 uppercase mb-2">Point of Contact</h4>
+                                        <h4 className="font-bold text-xs text-blue-600 uppercase mb-2">{t('pointOfContactLabel')}</h4>
                                         <div className="flex flex-col gap-1">
-                                            {selectedResource.contactPerson && <span className="font-medium text-gray-900">Name: {selectedResource.contactPerson}</span>}
-                                            {selectedResource.contactPhone && <span className="font-mono text-gray-700">Tel: {selectedResource.contactPhone}</span>}
+                                            {selectedResource.contactPerson && <span className="font-medium text-gray-900">{t('namePrefixLabel') + ' '}{selectedResource.contactPerson}</span>}
+                                            {selectedResource.contactPhone && <span className="font-mono text-gray-700">{t('telPrefixLabel') + ' '}{selectedResource.contactPhone}</span>}
                                         </div>
                                     </div>
                                 )}
@@ -475,7 +475,7 @@ const Resources: React.FC = () => {
                                 rel="noreferrer"
                                 className="w-full py-4 bg-black text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
                             >
-                                <Icons.MapPin size={20} /> Get Directions
+                                <Icons.MapPin size={20} /> {t('getDirections')}
                             </a>
                         </div>
                     </div>
@@ -487,7 +487,7 @@ const Resources: React.FC = () => {
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl relative">
                         <button onClick={() => setShowQR(null)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full"><Icons.X size={20} /></button>
-                        <h3 className="font-bold text-lg mb-4">Resource QR Code</h3>
+                        <h3 className="font-bold text-lg mb-4">{t('resourceQrCode')}</h3>
                         
                         <div className="bg-white border-2 border-gray-100 p-4 rounded-xl inline-block mb-4 shadow-inner">
                              <img 
@@ -500,7 +500,7 @@ const Resources: React.FC = () => {
                         <p className="text-xs text-gray-500 mb-6">{showQR.address}</p>
                         
                         <button className="w-full py-3 bg-gray-100 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-200">
-                            <Icons.Download size={18} /> Download
+                            <Icons.Download size={18} /> {t('downloadButton')}
                         </button>
                     </div>
                 </div>

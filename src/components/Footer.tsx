@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icons } from './Icon';
 import SafeSphereLogo from './SafeSphereLogo';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface FooterProps {
     onNavigate?: (tab: string) => void;
@@ -9,6 +10,7 @@ interface FooterProps {
 }
 
 const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenSystemStatus, darkMode = false }) => {
+    const { t } = useLanguage();
     const baseText = darkMode ? 'text-gray-300' : 'text-gray-600';
     const headingText = darkMode ? 'text-gray-200' : 'text-gray-800';
     const linkText = darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900';
@@ -18,7 +20,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenSystemStatus, darkMod
         if (navigator.share) {
             navigator.share({
                 title: 'SafeSphere',
-                text: 'Unified emergency framework for tactical theater logistics and real-time civilian safety.',
+                text: t('footerTagline'),
                 url: window.location.origin
             }).catch(() => {});
         }
@@ -32,31 +34,31 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenSystemStatus, darkMod
                     <div className="space-y-3 min-w-0 overflow-hidden">
                         <SafeSphereLogo size="xl" showText={true} darkMode={darkMode} variant="minimal" />
                         <p className={`text-[10px] leading-relaxed ${baseText}`}>
-                            Unified emergency framework for tactical theater logistics and real-time civilian safety.
+                            {t('footerTagline')}
                         </p>
                         <div className="flex flex-col gap-1 text-[10px] sm:text-[11px]">
                             <div className="flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                                <span className={baseText}>Network: Optimal</span>
+                                <span className={baseText}>{t('networkOptimal')}</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                                <span className={baseText}>Sync: Active</span>
+                                <span className={baseText}>{t('syncActive')}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Safety Hub */}
                     <div className="min-w-0">
-                        <h4 className={`font-bold text-[10px] sm:text-[11px] uppercase tracking-wider mb-3 ${headingText}`}>Safety Hub</h4>
+                        <h4 className={`font-bold text-[10px] sm:text-[11px] uppercase tracking-wider mb-3 ${headingText}`}>{t('safetyHub')}</h4>
                         <ul className="space-y-1.5 text-[10px]">
                             {[
-                                { label: 'Live Command Map', tab: 'maps' },
-                                { label: 'Resources', tab: 'resources' },
-                                { label: 'Directory', tab: 'directory' },
-                                { label: 'Prepare', tab: 'prepare' },
-                                { label: 'Learn', tab: 'learn' },
-                                { label: 'Notifications', tab: 'notifications' },
+                                { label: t('liveCommandMap'), tab: 'maps' },
+                                { label: t('nearbyResources'), tab: 'resources' },
+                                { label: t('directory'), tab: 'directory' },
+                                { label: t('prepare'), tab: 'prepare' },
+                                { label: t('learn'), tab: 'learn' },
+                                { label: t('notifications'), tab: 'notifications' },
                             ].map(({ label, tab }) => (
                                 <li key={label}>
                                     <button type="button" onClick={() => onNavigate?.(tab)} className={`${linkText} transition-colors`}>
@@ -69,13 +71,13 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenSystemStatus, darkMod
 
                     {/* Safety Protocols */}
                     <div className="min-w-0">
-                        <h4 className={`font-bold text-[10px] sm:text-[11px] uppercase tracking-wider mb-3 ${headingText}`}>Safety Protocols</h4>
+                        <h4 className={`font-bold text-[10px] sm:text-[11px] uppercase tracking-wider mb-3 ${headingText}`}>{t('safetyProtocols')}</h4>
                         <ul className="space-y-1.5 text-[10px]">
                             {[
-                                { label: 'Privacy Policy', tab: 'privacy' },
-                                { label: 'Settings', tab: 'settings' },
-                                { label: 'Profile', tab: 'profile' },
-                                { label: 'System Status', action: 'status' },
+                                { label: t('privacyPolicy'), tab: 'privacy' },
+                                { label: t('settings'), tab: 'settings' },
+                                { label: t('myProfile'), tab: 'profile' },
+                                { label: t('systemStatus'), action: 'status' },
                             ].map(({ label, tab, action }) => (
                                 <li key={label}>
                                     <button
@@ -92,13 +94,13 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenSystemStatus, darkMod
 
                     {/* Quick Operations */}
                     <div className="min-w-0">
-                        <h4 className={`font-bold text-[10px] sm:text-[11px] uppercase tracking-wider mb-3 ${headingText}`}>Quick Operations</h4>
+                        <h4 className={`font-bold text-[10px] sm:text-[11px] uppercase tracking-wider mb-3 ${headingText}`}>{t('quickOperations')}</h4>
                         <div className="grid grid-cols-2 gap-2">
                             {[
-                                { icon: Icons.Share ?? Icons.User, label: 'Share', onClick: handleShare },
-                                { icon: Icons.Download ?? Icons.FileText, label: 'Export', onClick: () => {} },
-                                { icon: Icons.FileText ?? Icons.Activity, label: 'Status', onClick: onOpenSystemStatus },
-                                { icon: Icons.Shield ?? Icons.Emergency, label: 'Report', onClick: () => onNavigate?.('emergency') },
+                                { icon: Icons.Share ?? Icons.User, label: t('shareButton'), onClick: handleShare },
+                                { icon: Icons.Download ?? Icons.FileText, label: t('exportButton'), onClick: () => {} },
+                                { icon: Icons.FileText ?? Icons.Activity, label: t('statusButton'), onClick: onOpenSystemStatus },
+                                { icon: Icons.Shield ?? Icons.Emergency, label: t('reportButton'), onClick: () => onNavigate?.('emergency') },
                             ].map(({ icon: Icon, label, onClick }) => (
                                 <button
                                     key={label}
@@ -117,23 +119,23 @@ const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenSystemStatus, darkMod
                             className={`mt-3 flex items-center gap-2 text-left w-full ${linkText} transition-colors`}
                         >
                             <Icons.Activity size={14} className="text-emerald-500 shrink-0" />
-                            <span className="text-[10px] font-medium">Health Status: Stable</span>
+                            <span className="text-[10px] font-medium">{t('healthStatusStable')}</span>
                         </button>
                     </div>
                 </div>
 
                 {/* Copyright & status bar */}
                 <div className={`pt-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex flex-wrap items-center justify-center sm:justify-between gap-3 text-[10px] sm:text-[11px] ${baseText}`}>
-                    <span>© 2025 SafeSphere Crisis Management</span>
+                    <span>© 2025 SafeSphere {t('crisisManagement')}</span>
                     <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4">
                         <span className="font-mono">v2.5.0-STABLE</span>
                         <span className="flex items-center gap-1">
                             <Icons.Shield size={12} className="text-emerald-500" />
-                            AES-256 Valid
+                            {t('aesValid')}
                         </span>
                         <span className="flex items-center gap-1">
                             <Icons.Globe size={12} className="text-blue-500" />
-                            Global Uptime 99.9%
+                            {t('globalUptime')}
                         </span>
                     </div>
                 </div>

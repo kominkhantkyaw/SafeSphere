@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Icons } from './Icon';
 import { User } from '../types';
 import { saveUser } from '../services/api';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface UserFormProps {
     initialData?: User | null;
@@ -11,6 +12,7 @@ interface UserFormProps {
 }
 
 const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess }) => {
+    const { t } = useLanguage();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
@@ -91,7 +93,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                     <Icons.User className="text-purple-600" size={24} />
-                    {initialData ? 'Edit Profile' : 'New Profile'}
+                    {initialData ? t('editProfile') : t('newProfileLabel')}
                 </h2>
                 <button onClick={onCancel} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
                     <Icons.X size={20} />
@@ -115,18 +117,18 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                             <Icons.Edit size={14} />
                         </label>
                     </div>
-                    <span className="text-xs text-gray-400">Tap pen to upload photo</span>
+                    <span className="text-xs text-gray-400">{t('tapToUploadPhoto')}</span>
                 </div>
 
                 {/* Core Info */}
                 <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('fullName')}</label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 text-sm" required />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Role</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('roleLabel')}</label>
                         <select value={role} onChange={e => setRole(e.target.value as any)} className="w-full p-3 rounded-xl border border-gray-300 text-sm bg-white">
                             <option value="Admin">Admin</option>
                             <option value="Responder">Responder</option>
@@ -135,9 +137,9 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Blood Type</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('bloodType')}</label>
                         <select value={bloodType} onChange={e => setBloodType(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 text-sm bg-white">
-                            <option value="Unknown">Unknown</option>
+                            <option value="Unknown">{t('unknownValue')}</option>
                             <option value="A+">A+</option>
                             <option value="A-">A-</option>
                             <option value="B+">B+</option>
@@ -153,11 +155,11 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                 {/* Emergency Contact */}
                 <div className="bg-red-50 p-4 rounded-xl border border-red-100">
                     <h3 className="text-xs font-bold text-red-600 uppercase mb-3 flex items-center gap-2">
-                        <Icons.Phone size={14}/> Emergency Contact
+                        <Icons.Phone size={14}/> {t('emergencyContactSection')}
                     </h3>
                     <div className="space-y-3">
                         <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Contact Name</label>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{t('contactNameLabel')}</label>
                             <input 
                                 type="text" 
                                 value={emergencyContactName} 
@@ -167,7 +169,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                             />
                         </div>
                         <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Contact Phone</label>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{t('contactPhoneLabel')}</label>
                             <input 
                                 type="tel" 
                                 value={emergencyContactPhone} 
@@ -183,7 +185,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                 <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
                     <h3 className="text-xs font-bold text-orange-700 uppercase mb-3 flex items-center gap-2">
                         <Icons.Key size={14}/>
-                        Special Permissions
+                        {t('specialPermissions')}
                     </h3>
                     <div className="space-y-2">
                         <label className="flex items-center gap-3 p-2 bg-white rounded-lg border border-orange-100 cursor-pointer hover:border-orange-300 transition-colors">
@@ -195,7 +197,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                             />
                             <div className="flex items-center gap-2">
                                 <Icons.CheckCircle size={16} className="text-green-500"/>
-                                <span className="text-sm font-medium text-gray-800">Approve Reports</span>
+                                <span className="text-sm font-medium text-gray-800">{t('approveReports')}</span>
                             </div>
                         </label>
                         <label className="flex items-center gap-3 p-2 bg-white rounded-lg border border-orange-100 cursor-pointer hover:border-orange-300 transition-colors">
@@ -207,7 +209,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                             />
                             <div className="flex items-center gap-2">
                                 <Icons.HelpCircle size={16} className="text-blue-500"/>
-                                <span className="text-sm font-medium text-gray-800">Request Information</span>
+                                <span className="text-sm font-medium text-gray-800">{t('requestInformation')}</span>
                             </div>
                         </label>
                          <label className="flex items-center gap-3 p-2 bg-white rounded-lg border border-orange-100 cursor-pointer hover:border-orange-300 transition-colors">
@@ -219,7 +221,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                             />
                             <div className="flex items-center gap-2">
                                 <Icons.Edit size={16} className="text-gray-500"/>
-                                <span className="text-sm font-medium text-gray-800">Edit Resources</span>
+                                <span className="text-sm font-medium text-gray-800">{t('editResourcesLabel')}</span>
                             </div>
                         </label>
                     </div>
@@ -239,7 +241,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                 {/* Account Details */}
                 <div className="bg-gray-50 p-4 rounded-xl space-y-3">
                     <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                        <Icons.Settings size={12}/> Account Settings
+                        <Icons.Settings size={12}/> {t('accountSettings')}
                     </h3>
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email</label>
@@ -251,7 +253,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1">
-                            {initialData ? 'Change Password' : 'Password'}
+                            {initialData ? t('changePasswordLabel') : t('passwordLabel')}
                         </label>
                         <div className="flex gap-2">
                             <input 
@@ -259,7 +261,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                                 value={password} 
                                 onChange={e => setPassword(e.target.value)} 
                                 className="w-full p-2 rounded-lg border text-sm" 
-                                placeholder={initialData ? 'Leave blank to keep current' : 'Enter password'}
+                                placeholder={initialData ? t('leaveBlankKeep') : t('enterPasswordPlaceholder')}
                                 required={!initialData}
                             />
                             {initialData && (
@@ -277,7 +279,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                 </div>
 
                 <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Volunteer Points</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('volunteerPoints')}</label>
                     <div className="flex items-center gap-3">
                         <button type="button" onClick={() => setVolunteerPoints(Math.max(0, volunteerPoints - 10))} className="p-3 bg-gray-100 rounded-lg font-bold">-</button>
                         <input type="number" value={volunteerPoints} onChange={e => setVolunteerPoints(Number(e.target.value))} className="flex-1 p-3 rounded-xl border border-gray-300 text-center font-bold" />
@@ -287,10 +289,10 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
 
                 <div className="pt-4 flex gap-3">
                     <button type="button" onClick={onCancel} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm">
-                        Cancel
+                        {t('cancelButton')}
                     </button>
                     <button type="submit" className="flex-1 py-3 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700 shadow-lg">
-                        Save Profile
+                        {t('saveProfile')}
                     </button>
                 </div>
             </form>

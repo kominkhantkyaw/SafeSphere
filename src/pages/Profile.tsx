@@ -60,7 +60,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
     };
 
     const addSkill = () => {
-        const newSkill = prompt('Enter new skill:');
+        const newSkill = prompt(t('enterNewSkill'));
         if (newSkill) {
             const skills = editedUser.skills || [];
             setEditedUser({ ...editedUser, skills: [...skills, newSkill] });
@@ -146,15 +146,15 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                 <div className="grid grid-cols-3 gap-3">
                     <div className="bg-white rounded-2xl shadow-lg p-4 text-center">
                         <div className="text-3xl font-bold text-blue-600">{user.safetyScore || 0}</div>
-                        <div className="text-xs text-gray-500 mt-1">Safety Score</div>
+                        <div className="text-xs text-gray-500 mt-1">{t('safetyScore')}</div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-4 text-center">
                         <div className="text-3xl font-bold text-purple-600">{user.xp || 0}</div>
-                        <div className="text-xs text-gray-500 mt-1">XP Points</div>
+                        <div className="text-xs text-gray-500 mt-1">{t('xpPoints')}</div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-4 text-center">
                         <div className="text-3xl font-bold text-green-600">{user.volunteerPoints || 0}</div>
-                        <div className="text-xs text-gray-500 mt-1">Volunteer</div>
+                        <div className="text-xs text-gray-500 mt-1">{t('volunteerLabel')}</div>
                     </div>
                 </div>
             </div>
@@ -269,19 +269,19 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                                         />
                                     ) : (
-                                        <div className="text-gray-900 font-medium">{user.phone || 'Not set'}</div>
+                                        <div className="text-gray-900 font-medium">{user.phone || t('notSet')}</div>
                                     )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Blood Type</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('bloodType')}</label>
                                     {isEditing ? (
                                         <select
                                             value={editedUser.bloodType || 'Unknown'}
                                             onChange={(e) => setEditedUser({ ...editedUser, bloodType: e.target.value as any })}
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                                         >
-                                            <option value="Unknown">Unknown</option>
+                                            <option value="Unknown">{t('unknownValue')}</option>
                                             <option value="A+">A+</option>
                                             <option value="A-">A-</option>
                                             <option value="B+">B+</option>
@@ -292,7 +292,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                             <option value="O-">O-</option>
                                         </select>
                                     ) : (
-                                        <div className="text-gray-900 font-medium">{user.bloodType || 'Unknown'}</div>
+                                        <div className="text-gray-900 font-medium">{user.bloodType || t('unknownValue')}</div>
                                     )}
                                 </div>
                             </div>
@@ -302,11 +302,11 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                         <div className="bg-white rounded-2xl shadow-md p-6">
                             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                                 <Icons.Phone size={20} className="text-red-500" />
-                                Emergency Contact
+                                {t('emergencyContactSection')}
                             </h2>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Contact Name</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('contactNameLabel')}</label>
                                     {isEditing ? (
                                         <input
                                             type="text"
@@ -315,11 +315,11 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                                         />
                                     ) : (
-                                        <div className="text-gray-900 font-medium">{user.emergencyContactName || 'Not set'}</div>
+                                        <div className="text-gray-900 font-medium">{user.emergencyContactName || t('notSet')}</div>
                                     )}
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Contact Phone</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('contactPhoneLabel')}</label>
                                     {isEditing ? (
                                         <input
                                             type="tel"
@@ -328,7 +328,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                                         />
                                     ) : (
-                                        <div className="text-gray-900 font-medium">{user.emergencyContactPhone || 'Not set'}</div>
+                                        <div className="text-gray-900 font-medium">{user.emergencyContactPhone || t('notSet')}</div>
                                     )}
                                 </div>
                             </div>
@@ -352,7 +352,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                             <div className="text-2xl font-bold text-gray-900">{user.safetyScore || 0}</div>
                                         </div>
                                     </div>
-                                    <div className="text-green-600 text-sm font-semibold">+5 this week</div>
+                                    <div className="text-green-600 text-sm font-semibold">+5 {t('thisWeek')}</div>
                                 </div>
 
                                 <div className="flex items-center justify-between p-4 bg-purple-50 rounded-xl">
@@ -365,7 +365,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                             <div className="text-2xl font-bold text-gray-900">{user.xp || 0} XP</div>
                                         </div>
                                     </div>
-                                    <div className="text-green-600 text-sm font-semibold">+120 this week</div>
+                                    <div className="text-green-600 text-sm font-semibold">+120 {t('thisWeek')}</div>
                                 </div>
 
                                 <div className="flex items-center justify-between p-4 bg-green-50 rounded-xl">
@@ -378,7 +378,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                             <div className="text-2xl font-bold text-gray-900">{user.volunteerPoints || 0}</div>
                                         </div>
                                     </div>
-                                    <div className="text-green-600 text-sm font-semibold">+8 this month</div>
+                                    <div className="text-green-600 text-sm font-semibold">+8 {t('thisMonth')}</div>
                                 </div>
                             </div>
                         </div>
@@ -406,7 +406,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                         <div className="bg-white rounded-2xl shadow-md p-6">
                             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                                 <Icons.Award size={20} className="text-yellow-500" />
-                                Disaster Preparedness Achievements
+                                {t('disasterAchievements')}
                             </h2>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="p-4 bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl border-2 border-yellow-300">
@@ -427,28 +427,28 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                     <div className="text-center">
                                         <Icons.Home size={32} className="text-green-600 mx-auto mb-2" />
                                         <div className="font-bold text-gray-900 text-sm">{t('homeSafety')}</div>
-                                        <div className="text-xs text-gray-600 mt-1">Level 5</div>
+                                        <div className="text-xs text-gray-600 mt-1">{t('levelPrefix')} 5</div>
                                     </div>
                                 </div>
                                 <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border-2 border-purple-300">
                                     <div className="text-center">
                                         <Icons.Users size={32} className="text-purple-600 mx-auto mb-2" />
-                                        <div className="font-bold text-gray-900 text-sm">Team Leader</div>
-                                        <div className="text-xs text-gray-600 mt-1">10+ Drills</div>
+                                        <div className="font-bold text-gray-900 text-sm">{t('teamLeader')}</div>
+                                        <div className="text-xs text-gray-600 mt-1">{t('drillsCompleted')}</div>
                                     </div>
                                 </div>
                                 <div className="p-4 bg-gradient-to-br from-red-50 to-red-100 rounded-xl border-2 border-red-300">
                                     <div className="text-center">
                                         <Icons.Flame size={32} className="text-red-600 mx-auto mb-2" />
-                                        <div className="font-bold text-gray-900 text-sm">Fire Safety</div>
-                                        <div className="text-xs text-gray-600 mt-1">Expert</div>
+                                        <div className="font-bold text-gray-900 text-sm">{t('fireSafety')}</div>
+                                        <div className="text-xs text-gray-600 mt-1">{t('expertLevel')}</div>
                                     </div>
                                 </div>
                                 <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl border-2 border-orange-300">
                                     <div className="text-center">
                                         <Icons.Navigation size={32} className="text-orange-600 mx-auto mb-2" />
-                                        <div className="font-bold text-gray-900 text-sm">Emergency Response</div>
-                                        <div className="text-xs text-gray-600 mt-1">Quick Responder</div>
+                                        <div className="font-bold text-gray-900 text-sm">{t('emergencyResponseLabel')}</div>
+                                        <div className="text-xs text-gray-600 mt-1">{t('quickResponder')}</div>
                                     </div>
                                 </div>
                             </div>
@@ -456,14 +456,14 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
 
                         {/* Activity Timeline */}
                         <div className="bg-white rounded-2xl shadow-md p-6">
-                            <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Activities</h2>
+                            <h2 className="text-lg font-bold text-gray-900 mb-4">{t('recentActivities')}</h2>
                             <div className="space-y-3">
                                 <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
                                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                                         <Icons.CheckCircle size={18} className="text-blue-600" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-semibold text-sm text-gray-900">Completed Emergency Drill</div>
+                                        <div className="font-semibold text-sm text-gray-900">{t('completedDrill')}</div>
                                         <div className="text-xs text-gray-500 mt-1">2 days ago • +50 XP</div>
                                     </div>
                                 </div>
@@ -472,7 +472,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                         <Icons.Heart size={18} className="text-green-600" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-semibold text-sm text-gray-900">Volunteered at Community Event</div>
+                                        <div className="font-semibold text-sm text-gray-900">{t('volunteeredEvent')}</div>
                                         <div className="text-xs text-gray-500 mt-1">1 week ago • +5 Volunteer Points</div>
                                     </div>
                                 </div>
@@ -481,7 +481,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
                                         <Icons.Star size={18} className="text-purple-600" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="font-semibold text-sm text-gray-900">Updated Emergency Kit</div>
+                                        <div className="font-semibold text-sm text-gray-900">{t('updatedKit')}</div>
                                         <div className="text-xs text-gray-500 mt-1">2 weeks ago • +20 XP</div>
                                     </div>
                                 </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Icons } from '../components/Icon';
 import { fetchEarthquakes } from '../services/api';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface NotificationsProps {
     onBack?: () => void;
@@ -16,62 +17,65 @@ interface Notification {
     read: boolean;
 }
 
-const formatTimeAgo = (epochMs: number): string => {
+const formatTimeAgo = (epochMs: number, t: (key: string) => string): string => {
     const diff = Date.now() - epochMs;
     const mins = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
-    if (mins < 60) return mins <= 1 ? 'Just now' : `${mins} min ago`;
-    if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
-    if (days < 7) return `${days} day${days !== 1 ? 's' : ''} ago`;
+    if (mins < 60) return mins <= 1 ? t('justNow') : `${mins} ${t('minAgo')}`;
+    if (hours < 24) return hours === 1 ? `1 ${t('hourAgo')}` : `${hours} ${t('hoursAgo')}`;
+    if (days < 7) return days === 1 ? `1 ${t('dayAgo')}` : `${days} ${t('daysAgo')}`;
     return new Date(epochMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
 const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }) => {
+    const { t } = useLanguage();
     const [earthquakes, setEarthquakes] = useState<{ id: string; mag: number; place: string; time: number; title?: string }[]>([]);
 
-    const [notifications, setNotifications] = React.useState<Notification[]>([
+    const initialNotifications = useMemo<Notification[]>(() => [
         {
             id: 1,
             type: 'emergency',
-            title: 'Emergency Alert',
-            message: 'Severe weather warning in your area. Seek shelter immediately.',
-            timestamp: '5 min ago',
+            title: t('emergencyAlert'),
+            message: t('severeWeatherWarning'),
+            timestamp: formatTimeAgo(Date.now() - 5 * 60000, t),
             read: false
         },
         {
             id: 2,
             type: 'alert',
-            title: 'New Report Update',
-            message: 'Your incident report #12345 has been reviewed and approved.',
-            timestamp: '1 hour ago',
+            title: t('newReportUpdate'),
+            message: t('reportReviewedApproved'),
+            timestamp: formatTimeAgo(Date.now() - 3600000, t),
             read: false
         },
         {
             id: 3,
             type: 'success',
-            title: 'Safety Check Complete',
-            message: 'Your weekly safety check has been successfully completed.',
-            timestamp: '3 hours ago',
+            title: t('safetyCheckComplete'),
+            message: t('weeklySafetyCheck'),
+            timestamp: formatTimeAgo(Date.now() - 3 * 3600000, t),
             read: true
         },
         {
             id: 4,
             type: 'info',
-            title: 'Community Update',
-            message: 'New safety resources are available in your area.',
-            timestamp: 'Yesterday',
+            title: t('communityUpdate'),
+            message: t('newSafetyResources'),
+            timestamp: t('yesterdayLabel'),
             read: true
         },
         {
             id: 5,
             type: 'emergency',
-            title: 'SOS Alert Nearby',
-            message: 'An SOS signal was triggered 2km from your location.',
-            timestamp: '2 days ago',
+            title: t('sosAlertNearby'),
+            message: t('sosSignalTriggered'),
+            timestamp: formatTimeAgo(Date.now() - 2 * 86400000, t),
             read: true
         }
-    ]);
+    ], [t]);
+
+    const [notifications, setNotifications] = React.useState<Notification[]>(initialNotifications);
 
     useEffect(() => {
         fetchEarthquakes().then(data => {
@@ -86,16 +90,36 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
         });
     }, []);
 
+    useEffect(() => {
+        setNotifications(prev => {
+            const updatedMap = new Map(prev.map(n => [n.id, n]));
+            initialNotifications.forEach(initial => {
+                const existing = updatedMap.get(initial.id);
+                if (existing) {
+                    updatedMap.set(initial.id, {
+                        ...existing,
+                        title: initial.title,
+                        message: initial.message,
+                        timestamp: initial.timestamp
+                    });
+                } else {
+                    updatedMap.set(initial.id, initial);
+                }
+            });
+            return Array.from(updatedMap.values()).sort((a, b) => a.id - b.id);
+        });
+    }, [initialNotifications]);
+
     const seismicNotifications = useMemo((): Notification[] => {
         return earthquakes.map((eq, idx) => ({
             id: 90000 + idx,
             type: 'seismic',
-            title: `Seismic Event – M${eq.mag.toFixed(1)}`,
-            message: eq.place || eq.title || `Magnitude ${eq.mag.toFixed(1)} earthquake detected. View Live Command Map for details.`,
-            timestamp: eq.time ? formatTimeAgo(eq.time) : 'Just now',
+            title: t('seismicEventTitle').replace('{magnitude}', eq.mag.toFixed(1)),
+            message: eq.place || eq.title || t('magnitudeDetected').replace('{magnitude}', eq.mag.toFixed(1)),
+            timestamp: eq.time ? formatTimeAgo(eq.time, t) : t('justNow'),
             read: false
         }));
-    }, [earthquakes]);
+    }, [earthquakes, t]);
 
     const displayNotifications = useMemo(() => {
         return [...seismicNotifications, ...notifications.filter(n => n.id < 90000)];
@@ -162,13 +186,13 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
                         </button>
                     )}
                     <div className="flex-1">
-                        <h1 className="text-xl font-bold text-gray-900">Notifications</h1>
+                        <h1 className="text-xl font-bold text-gray-900">{t('notificationsHeading')}</h1>
                         {unreadCount > 0 && (
-                            <p className="text-sm text-gray-500">{unreadCount} unread message{unreadCount !== 1 ? 's' : ''}</p>
+                            <p className="text-sm text-gray-500">{unreadCount} {unreadCount !== 1 ? t('unreadMessages') : t('unreadMessage')}</p>
                         )}
                     </div>
                     <button className="text-sm text-blue-600 font-semibold hover:text-blue-700" onClick={markAllAsRead}>
-                        Mark all read
+                        {t('markAllRead')}
                     </button>
                 </div>
             </div>
@@ -178,15 +202,15 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
                 <div className="grid grid-cols-3 gap-4">
                     <div className="text-center">
                         <div className="text-2xl font-bold text-blue-600">{displayNotifications.length}</div>
-                        <div className="text-xs text-gray-500">Total</div>
+                        <div className="text-xs text-gray-500">{t('totalLabel')}</div>
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-red-600">{unreadCount}</div>
-                        <div className="text-xs text-gray-500">Unread</div>
+                        <div className="text-xs text-gray-500">{t('unreadLabel')}</div>
                     </div>
                     <div className="text-center">
                         <div className="text-2xl font-bold text-green-600">{displayNotifications.length - unreadCount}</div>
-                        <div className="text-xs text-gray-500">Read</div>
+                        <div className="text-xs text-gray-500">{t('readLabel')}</div>
                     </div>
                 </div>
             </div>
@@ -237,7 +261,7 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
                                         onClick={(e) => { e.stopPropagation(); notification.type === 'seismic' && onNavigateToMap?.(); }}
                                         className="mt-3 px-4 py-2 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors"
                                     >
-                                        {notification.type === 'seismic' ? 'View on Live Command Map' : 'View Details'}
+                                        {notification.type === 'seismic' ? t('viewOnLiveMap') : t('viewDetailsBtn')}
                                     </button>
                                 )}
                             </div>
@@ -252,9 +276,9 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
                     <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                         <Icons.Bell size={40} className="text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Notifications</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('noNotifications')}</h3>
                     <p className="text-sm text-gray-500 text-center">
-                        You're all caught up! Check back later for updates.
+                        {t('allCaughtUp')}
                     </p>
                 </div>
             )}
