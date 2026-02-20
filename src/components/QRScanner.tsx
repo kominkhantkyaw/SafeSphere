@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { Icons } from './Icon';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -54,18 +54,21 @@ async function safeStop(instance: Html5Qrcode | null): Promise<void> {
     if (!instance) return;
     try {
         const state = instance.getState();
-        if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+        // 2 = SCANNING, 3 = PAUSED
+        if (state === 2 || state === 3) {
             await instance.stop();
         }
     } catch {
         // Already stopped or transitional state
     }
-    try { instance.clear(); } catch { /* ignore */ }
 }
 
-function clearReaderElement() {
+function cleanupReaderDOM() {
     const el = document.getElementById(READER_ID);
-    if (el) el.innerHTML = '';
+    if (!el) return;
+    // html5-qrcode injects <video> and <canvas> — remove them so the next
+    // instance can start fresh, but keep the container div itself intact.
+    while (el.firstChild) el.removeChild(el.firstChild);
 }
 
 const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
@@ -93,13 +96,15 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
         startingRef.current = true;
 
         try {
+            // 1. Tear down any previous instance
             await safeStop(html5QrRef.current);
             html5QrRef.current = null;
-            clearReaderElement();
+            cleanupReaderDOM();
 
             if (!mountedRef.current) return;
 
-            await new Promise(r => setTimeout(r, 150));
+            // 2. Wait for the reader div to be fully rendered with layout
+            await new Promise(r => setTimeout(r, 250));
             if (!mountedRef.current) return;
 
             const el = document.getElementById(READER_ID);
@@ -111,26 +116,29 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                 return;
             }
 
+            // 3. Responsive QR box — 70% of container width, capped at 250px
             const containerWidth = el.clientWidth || 300;
-            const qrBoxSize = Math.min(Math.floor(containerWidth * 0.75), 250);
+            const qrBoxSize = Math.min(Math.floor(containerWidth * 0.70), 250);
 
+            // 4. Create instance
             const html5Qr = new Html5Qrcode(READER_ID, { verbose: false });
             html5QrRef.current = html5Qr;
 
             const scanConfig = {
                 fps: 10,
                 qrbox: { width: qrBoxSize, height: qrBoxSize },
-                aspectRatio: 1,
                 disableFlip: false,
             };
 
             let scanned = false;
-            const onSuccess = async (decodedText: string) => {
+            const onSuccess = (decodedText: string) => {
                 if (scanned) return;
                 scanned = true;
 
-                await safeStop(html5Qr);
-                html5QrRef.current = null;
+                // Stop camera then process result
+                safeStop(html5Qr).then(() => {
+                    html5QrRef.current = null;
+                });
 
                 if (!mountedRef.current) return;
 
@@ -146,43 +154,63 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                 onScanRef.current?.(decodedText);
             };
 
-            const cameras = await Html5Qrcode.getCameras();
-            if (!cameras || cameras.length === 0) {
-                throw new Error('No cameras found on this device.');
-            }
+            // 5. Start camera — try rear first, then front, then any available device
+            //    Do NOT call getCameras() beforehand; it triggers a separate permission
+            //    prompt that conflicts with the start() call on many browsers.
+            let started = false;
 
-            const rearCamera = cameras.find(c =>
-                /back|rear|environment/i.test(c.label)
-            );
-
-            try {
-                if (rearCamera) {
-                    await html5Qr.start(
-                        rearCamera.id,
-                        scanConfig,
-                        onSuccess,
-                        () => {}
-                    );
-                } else {
-                    await html5Qr.start(
-                        { facingMode: { ideal: 'environment' } },
-                        scanConfig,
-                        onSuccess,
-                        () => {}
-                    );
-                }
-            } catch {
+            // Attempt A: rear camera via facingMode constraint
+            if (!started) {
                 try {
                     await html5Qr.start(
-                        cameras[0].id,
+                        { facingMode: 'environment' },
                         scanConfig,
                         onSuccess,
                         () => {}
                     );
-                } catch (innerErr) {
-                    throw innerErr;
+                    started = true;
+                } catch {
+                    // Rear camera unavailable or constraint rejected
                 }
             }
+
+            // Attempt B: front camera
+            if (!started) {
+                try {
+                    await html5Qr.start(
+                        { facingMode: 'user' },
+                        scanConfig,
+                        onSuccess,
+                        () => {}
+                    );
+                    started = true;
+                } catch {
+                    // Front camera also failed
+                }
+            }
+
+            // Attempt C: enumerate devices and try the first available camera
+            if (!started) {
+                try {
+                    const cameras = await Html5Qrcode.getCameras();
+                    if (cameras && cameras.length > 0) {
+                        await html5Qr.start(
+                            cameras[0].id,
+                            scanConfig,
+                            onSuccess,
+                            () => {}
+                        );
+                        started = true;
+                    }
+                } catch {
+                    // Final attempt also failed
+                }
+            }
+
+            if (!started) {
+                throw new Error('Could not access any camera on this device.');
+            }
+
         } catch (err) {
             if (!mountedRef.current) return;
             const msg = err instanceof Error ? err.message : String(err);
@@ -190,12 +218,12 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
             let friendlyMsg = msg || t('cameraAccessFailed');
             if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
                 friendlyMsg = 'Camera permission denied. Please allow camera access in your browser settings and try again.';
-            } else if (msg.includes('NotFoundError') || msg.includes('No cameras')) {
+            } else if (msg.includes('NotFoundError') || msg.includes('Requested device not found')) {
                 friendlyMsg = 'No camera found. Please connect a camera or use a device with a built-in camera.';
             } else if (msg.includes('NotReadableError') || msg.includes('Could not start')) {
                 friendlyMsg = 'Camera is in use by another application. Please close other apps using the camera and try again.';
-            } else if (msg.includes('OverconstrainedError')) {
-                friendlyMsg = 'Camera does not support the required settings. Trying with default settings...';
+            } else if (msg.includes('InsecureContext') || msg.includes('Only secure origins')) {
+                friendlyMsg = 'Camera requires HTTPS. Please use https:// or localhost.';
             }
 
             setCameraError(friendlyMsg);
@@ -210,7 +238,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
         if (!isOpen) {
             safeStop(html5QrRef.current).then(() => {
                 html5QrRef.current = null;
-                clearReaderElement();
+                cleanupReaderDOM();
             });
             return;
         }
@@ -224,13 +252,13 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
 
         const timerId = setTimeout(() => {
             if (mountedRef.current) startCamera();
-        }, 200);
+        }, 300);
 
         return () => {
             clearTimeout(timerId);
             safeStop(html5QrRef.current).then(() => {
                 html5QrRef.current = null;
-                clearReaderElement();
+                cleanupReaderDOM();
             });
         };
     }, [isOpen, startCamera]);
