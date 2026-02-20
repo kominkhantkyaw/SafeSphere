@@ -429,7 +429,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
     }, [seismicWaveData, alerts]);
 
     return (
-        <div className="home-page-content flex flex-col space-y-6 pb-24 p-4 sm:p-5 md:p-6 relative min-h-screen">
+        <div className="home-page-content flex flex-col space-y-6 sm:space-y-7 md:space-y-8 lg:space-y-10 pb-24 p-4 sm:p-5 md:p-6 lg:p-8 xl:p-10 relative min-h-screen w-full max-w-4xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
             {/* Live Location & Weather Bar */}
             <button
                 type="button"
@@ -439,17 +439,17 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                 className="w-full rounded-2xl bg-slate-700 border border-slate-700 text-white shadow-lg cursor-pointer hover:bg-slate-600 active:bg-slate-700 disabled:opacity-70 disabled:cursor-not-allowed transition-colors text-left outline-none focus:outline-none focus:ring-0"
             >
                 {/* Top row: Location name + Weather condition */}
-                <div className="flex items-center justify-between px-4 sm:px-5 pt-3 pb-1.5">
+                <div className="flex items-center justify-between px-4 sm:px-5 md:px-6 lg:px-8 pt-3 pb-1.5 md:pt-4 md:pb-2">
                     <div className="flex items-center gap-2 min-w-0">
-                        <Icons.MapPin size={16} className="text-green-400 shrink-0" />
-                        <span className="text-sm font-bold truncate">
+                        <Icons.MapPin size={16} className="text-green-400 shrink-0 md:w-5 md:h-5" />
+                        <span className="text-sm md:text-base lg:text-lg font-bold truncate">
                             {coordsLoading ? '...' : locationInfo ? locationInfo.display : liveCoords ? `${liveCoords.lat.toFixed(4)}, ${liveCoords.lng.toFixed(4)}` : '—'}
                             {coordsError && !coordsLoading && <span className="text-slate-400 font-normal text-xs ml-1">({t('approx')})</span>}
                         </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 pl-3">
-                        {weather && <span className="text-lg leading-none">{weather.conditionIcon}</span>}
-                        <span className="text-sm font-bold">
+                        {weather && <span className="text-lg md:text-xl leading-none">{weather.conditionIcon}</span>}
+                        <span className="text-sm md:text-base lg:text-lg font-bold">
                             {weatherLoading ? '...' : weather ? `${weather.temperature}°C` : isOfflineMode ? t('offline') : '—'}
                         </span>
                     </div>
@@ -544,8 +544,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
 
             {/* Active Alerts – live seismic data by chartRange */}
             <div>
-                <div className="flex justify-between items-center mb-3">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
+                <div className="flex justify-between items-center mb-3 md:mb-4">
+                    <h2 className="text-lg md:text-xl lg:text-2xl font-bold flex items-center gap-2">
                         {t('activeAlerts')}
                         {!isOfflineMode && (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] sm:text-xs font-bold border border-emerald-200" title={t('liveData') || 'Live data'}>
@@ -568,9 +568,9 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         </button>
                     )}
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-3 md:space-y-4">
                     {sortedAlerts.slice(0, 3).map(alert => (
-                        <div key={alert.id} className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 border-l-4 ${
+                        <div key={alert.id} className={`bg-white p-4 md:p-5 lg:p-6 rounded-xl md:rounded-2xl shadow-sm border border-gray-100 flex gap-4 border-l-4 ${
                             alert.type === 'earthquake' ? 'border-l-amber-600' :
                             alert.type === 'tsunami' ? 'border-l-cyan-600' :
                             alert.type === 'volcano' ? 'border-l-red-700' :
@@ -627,11 +627,11 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                 </div>
             </div>
 
-            {/* Quick Actions - Report Incident & View Score Breakdown (prototype: both white cards) */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Quick Actions - Report Incident & View Score Breakdown */}
+            <div className="grid grid-cols-2 gap-4 md:gap-6 lg:gap-8">
                 <button
                     onClick={() => onNavigate('emergency')}
-                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center gap-2 active:scale-95 transition-transform"
+                    className="bg-white p-6 md:p-8 lg:p-10 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center gap-2 active:scale-95 transition-transform hover:border-gray-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
                     aria-label={t('reportIncident')}
                 >
                     <Icons.Emergency size={28} className="text-red-500" />
@@ -639,7 +639,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                 </button>
                 <button
                     onClick={() => setShowScoreDetails(true)}
-                    className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center gap-2 active:scale-95 transition-transform"
+                    className="bg-white p-6 md:p-8 lg:p-10 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center justify-center text-center gap-2 active:scale-95 transition-transform hover:border-gray-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
                     aria-label={t('viewScoreBreakdown')}
                 >
                     <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center shadow-inner ring-1 ring-emerald-200/50">
@@ -649,17 +649,19 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                 </button>
             </div>
 
-            {/* Seismic Alerts - magnitude wave (X.XM), dotted line, 24h or 7 days */}
-            <div className="bg-[#e8e8e8] p-4 sm:p-5 rounded-xl border border-slate-400/60 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <h3 className="font-bold text-sm text-slate-800">
+            {/* Seismic Alerts - magnitude wave (X.XM), dotted line – responsive mobile, tablet, desktop/laptop */}
+            <div className="bg-[#e8e8e8] w-full overflow-hidden rounded-xl md:rounded-2xl border border-slate-400/60 shadow-sm px-3 py-4 sm:px-5 sm:py-5 md:px-6 md:py-6 lg:px-8 lg:py-7 xl:px-10 xl:py-8">
+                {/* Title row: full width on mobile, single row on sm+ with space for controls */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between mb-3 md:mb-4 lg:mb-5">
+                    <h3 className="font-bold text-sm sm:text-base md:text-lg lg:text-xl text-slate-800 shrink-0">
                         {chartRange === '24h' ? t('incidentFrequencyByDay') : chartRange === '7d' ? t('incidentFrequencyByWeek') : chartRange === '1M' ? t('incidentFrequencyByMonth') : t('incidentFrequencyByYear')}
                     </h3>
-                    <div className="flex items-center gap-1">
+                    {/* Range buttons: touch-friendly on mobile, compact on desktop with hover states */}
+                    <div className="flex flex-wrap items-center gap-2 md:gap-3">
                         <button
                             type="button"
                             onClick={() => setChartRange('24h')}
-                            className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-colors ${chartRange === '24h' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80'}`}
+                            className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 py-2.5 sm:px-2.5 sm:py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 text-xs sm:text-[10px] md:text-xs font-semibold rounded-lg border transition-colors touch-manipulation ${chartRange === '24h' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80 active:bg-slate-300 lg:hover:border-slate-400'}`}
                             title={t('incidentFrequencyLast24h')}
                             aria-label={t('incidentFrequencyLast24h')}
                         >
@@ -668,7 +670,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         <button
                             type="button"
                             onClick={() => setChartRange('7d')}
-                            className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-colors ${chartRange === '7d' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80'}`}
+                            className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 py-2.5 sm:px-2.5 sm:py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 text-xs sm:text-[10px] md:text-xs font-semibold rounded-lg border transition-colors touch-manipulation ${chartRange === '7d' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80 active:bg-slate-300 lg:hover:border-slate-400'}`}
                             title={t('incidentFrequencyByWeek')}
                             aria-label={t('incidentFrequencyByWeek')}
                         >
@@ -677,7 +679,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         <button
                             type="button"
                             onClick={() => setChartRange('1M')}
-                            className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-colors ${chartRange === '1M' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80'}`}
+                            className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 py-2.5 sm:px-2.5 sm:py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 text-xs sm:text-[10px] md:text-xs font-semibold rounded-lg border transition-colors touch-manipulation ${chartRange === '1M' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80 active:bg-slate-300 lg:hover:border-slate-400'}`}
                             title={t('incidentFrequencyLast1Month')}
                             aria-label={t('incidentFrequencyLast1Month')}
                         >
@@ -686,20 +688,21 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         <button
                             type="button"
                             onClick={() => setChartRange('1Y')}
-                            className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-colors ${chartRange === '1Y' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80'}`}
+                            className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 px-3 py-2.5 sm:px-2.5 sm:py-1 md:px-3 md:py-1.5 lg:px-4 lg:py-2 text-xs sm:text-[10px] md:text-xs font-semibold rounded-lg border transition-colors touch-manipulation ${chartRange === '1Y' ? 'bg-slate-600 text-white border-slate-600' : 'bg-slate-200/80 text-slate-600 border-slate-300 hover:bg-slate-300/80 active:bg-slate-300 lg:hover:border-slate-400'}`}
                             title={t('incidentFrequencyLast1Year')}
                             aria-label={t('incidentFrequencyLast1Year')}
                         >
                             {t('oneYear')}
                         </button>
+                        {seismicWaveData.totalAlerts > 0 && (
+                            <span className="text-[10px] sm:text-[11px] md:text-xs font-semibold text-slate-700 bg-slate-200/80 px-2.5 py-1.5 md:px-3 md:py-2 rounded-lg border border-slate-300 shrink-0">
+                                {seismicWaveData.totalAlerts} {t('seismicAlerts')} · {seismicWaveData.minMag.toFixed(1)}M – {seismicWaveData.maxMag.toFixed(1)}M
+                            </span>
+                        )}
                     </div>
-                    {seismicWaveData.totalAlerts > 0 && (
-                        <span className="text-[10px] font-semibold text-slate-700 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300">
-                            {seismicWaveData.totalAlerts} {t('seismicAlerts')} · {seismicWaveData.minMag.toFixed(1)}M – {seismicWaveData.maxMag.toFixed(1)}M
-                        </span>
-                    )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-[11px] text-slate-600 mb-2" title={t('severityLegendHint')}>
+                {/* Severity legend: readable on all breakpoints, scales on desktop */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:gap-x-6 text-[10px] sm:text-[11px] md:text-xs lg:text-sm text-slate-600 mb-3 md:mb-4" title={t('severityLegendHint')}>
                     {(() => {
                         const { minMag, maxMag } = seismicWaveData;
                         const range = Math.max(maxMag - minMag, 0.5);
@@ -717,13 +720,16 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         );
                     })()}
                 </div>
-                <div className="bg-[#f5f5f5] rounded-lg border border-slate-300/80 overflow-hidden">
+                <div className="bg-[#f5f5f5] rounded-lg md:rounded-xl border border-slate-300/80 overflow-hidden min-w-0">
                     {(() => {
                         const { points, xLabels, xLabelCount, minMag, maxMag, timeRange } = seismicWaveData as typeof seismicWaveData & { timeRange?: { start: number; end: number } };
-                        const chartTop = 20;
-                        const chartBottom = 85;
-                        const chartLeft = 38;
-                        const chartRight = 278;
+                        const chartTop = 24;
+                        const chartBottom = 90;
+                        const plotWidth = 320;
+                        const marginLeft = 48;
+                        const marginRight = 28;
+                        const chartLeft = marginLeft;
+                        const chartRight = marginLeft + plotWidth;
                         const chartH = chartBottom - chartTop;
                         const magRange = Math.max(maxMag - minMag, 0.5);
                         const toY = (mag: number) => chartBottom - ((Math.min(Math.max(mag, minMag), maxMag) - minMag) / magRange) * chartH;
@@ -762,8 +768,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         };
 
                         return (
-                            <div className="h-40 sm:h-44 relative px-1">
-                                <svg viewBox="0 0 300 130" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+                            <div className="relative w-full min-h-[200px] h-[200px] sm:min-h-[220px] sm:h-[220px] md:min-h-[280px] md:h-[280px] lg:min-h-[340px] lg:h-[340px] xl:min-h-[400px] xl:h-[400px] px-1 overflow-x-auto overflow-y-hidden" role="img" aria-label={t('seismicAlerts')}>
+                                <svg viewBox={`0 0 ${marginLeft + plotWidth + marginRight} 135`} className="w-full h-full min-w-[280px] mx-auto block" preserveAspectRatio="xMidYMid meet">
                                     {/* Horizontal grid - magnitude labels with severity tooltip (Low 1-4M, Mod 4-6M, High 6-8M) */}
                                     {yTicks.map((magVal) => {
                                         const y = toY(magVal);
@@ -785,13 +791,26 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                     })}
                                     {/* Dotted line - sound wave form */}
                                     <polyline fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 5" points={linePoints} />
-                                    {/* Tiny data points - click to view location on map */}
+                                    {/* Tiny data points - click to view location on map; show magnitude (e.g. 6.4M) for 24h, 7d, 1M, and sampled for 1Y */}
                                     {pts.map(([x, y, p], i) => {
                                         const pTime = (p as { time?: number }).time;
                                         const labelIdx = (timeRange && pTime != null)
                                             ? Math.min(Math.floor(((pTime - timeRange.start) / (timeRange.end - timeRange.start)) * xLabelCount), xLabelCount - 1)
                                             : Math.min(Math.floor((i / Math.max(pts.length - 1, 1)) * xLabelCount), xLabelCount - 1);
-                                        const showLabel = pts.length <= 15;
+                                        const maxPointLabels = 15;
+                                        const showLabel = chartRange === '24h'
+                                            ? pts.length <= 30
+                                            : chartRange === '7d' || chartRange === '1M'
+                                                ? pts.length <= maxPointLabels
+                                                : chartRange === '1Y'
+                                                    ? pts.length <= maxPointLabels
+                                                        ? true
+                                                        : (() => {
+                                                            const step = (pts.length - 1) / (maxPointLabels - 1);
+                                                            const sampled = [...Array(maxPointLabels)].map((_, k) => Math.round(k * step));
+                                                            return sampled.includes(i);
+                                                        })()
+                                                    : pts.length <= maxPointLabels;
                                         const hasLocation = p.lat != null && p.lng != null;
                                         return (
                                             <g key={i} className={hasLocation ? 'cursor-pointer' : ''} onClick={() => hasLocation && handlePointClick(p)}>

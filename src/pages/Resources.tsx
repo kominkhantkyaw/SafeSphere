@@ -183,7 +183,7 @@ const Resources: React.FC = () => {
     }
 
     return (
-        <div className="flex flex-col pb-24 p-4 min-h-screen relative">
+        <div className="flex flex-col pb-24 p-4 sm:p-5 md:p-6 min-h-screen relative w-full min-w-0">
             <h1 className="text-2xl font-bold mb-4 flex justify-between items-center">
                 {t('resourceHub')}
                 <button onClick={handleAdd} className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shadow-lg">

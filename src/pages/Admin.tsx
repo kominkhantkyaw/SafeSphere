@@ -308,7 +308,7 @@ const Admin: React.FC = () => {
     if (showForm === 'user') return <ModalContainer><UserForm initialData={editingItem} onCancel={() => setShowForm(null)} onSuccess={() => { setShowForm(null); loadData(); }} /></ModalContainer>;
 
     return (
-        <div className="flex flex-col pb-24 p-4 sm:p-5 md:p-6 min-h-screen relative animate-in fade-in h-screen">
+        <div className="flex flex-col pb-24 p-4 sm:p-5 md:p-6 min-h-screen relative animate-in fade-in">
             <div className="flex justify-between items-center mb-6 shrink-0">
                 <div>
                     <h1 className="text-2xl font-bold">{t('commandCenter')}</h1>

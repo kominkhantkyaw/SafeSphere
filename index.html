@@ -29,6 +29,13 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
+        html {
+            box-sizing: border-box;
+            -webkit-text-size-adjust: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+        *, *::before, *::after { box-sizing: inherit; }
         html, body {
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
@@ -36,13 +43,19 @@
             min-height: 100vh;
             min-height: 100dvh;
             margin: 0;
+            width: 100%;
             overflow-x: hidden;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
         }
         #root {
             min-height: 100vh;
             min-height: 100dvh;
+            width: 100%;
+            display: flex;
+            justify-content: center;
         }
         body.login-page-active { background-color: #1e40af !important; }
         /* Hide scrollbar for clean mobile UI */

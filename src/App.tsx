@@ -243,12 +243,12 @@ const AppContent: React.FC = () => {
 
     return (
         <div 
-            className={`min-h-screen min-h-[100dvh] font-sans w-full max-w-full sm:max-w-lg md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto relative shadow-2xl overflow-x-hidden flex flex-col transition-colors duration-300`}
+            className="min-h-screen min-h-[100dvh] font-sans w-full max-w-full min-w-0 sm:max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl mx-auto relative shadow-2xl overflow-x-hidden flex flex-col transition-colors duration-300"
             style={{ backgroundColor: effectiveDarkMode ? '#1f2937' : theme.backgroundColor, color: effectiveDarkMode ? '#fff' : '#000' }}
         >
             
             {/* Header with Settings Trigger */}
-            <div className="sticky top-0 z-40 safe-top">
+            <div className="sticky top-0 z-40 safe-top shrink-0">
                 <Header 
                     title={activeTab === 'profile' ? t('myProfile') : 
                            activeTab === 'settings' ? t('settings') : 
@@ -281,8 +281,8 @@ const AppContent: React.FC = () => {
                 </div>
             )}
 
-            <div className={`flex-1 overflow-y-auto no-scrollbar relative flex flex-col ${!BACK_ENABLED_TABS.includes(activeTab as typeof BACK_ENABLED_TABS[number]) ? 'pb-content-nav' : ''}`}>
-                <div className="flex-1">
+            <div className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden no-scrollbar relative flex flex-col app-scroll-container ${!BACK_ENABLED_TABS.includes(activeTab as typeof BACK_ENABLED_TABS[number]) ? 'pb-content-nav' : ''}`}>
+                <div className="flex-1 min-w-0 flex flex-col app-page-wrap">
                     {renderContent()}
                 </div>
                 {!BACK_ENABLED_TABS.includes(activeTab as typeof BACK_ENABLED_TABS[number]) && (

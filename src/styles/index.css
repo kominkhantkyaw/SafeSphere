@@ -48,6 +48,23 @@ body.login-page-active {
 @media (min-width: 640px) { :root { --nav-height: 5.5rem; } }
 .pb-content-nav { padding-bottom: calc(var(--nav-height) + 3rem + env(safe-area-inset-bottom, 0px)); }
 
+/* Main scroll area: smooth on iOS, prevent layout shift */
+.app-scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  min-width: 0;
+}
+
+/* Page wrapper: consistent min-height so every page fills viewport on all devices */
+.app-page-wrap {
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
 /* Responsive touch-target enforcement for interactive elements on mobile */
 @media (pointer: coarse) {
   button, [role="button"], a, select, input[type="checkbox"], input[type="radio"] {
