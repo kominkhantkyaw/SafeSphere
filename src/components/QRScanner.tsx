@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 import { Icons } from './Icon';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -33,11 +33,9 @@ const RESCUE_CENTERS: RescueCenter[] = [
 function parseScannedData(data: string): { type: 'rescue' | 'url' | 'resource' | 'generic'; payload: RescueCenter | string } {
     const trimmed = data.trim();
 
-    // Match rescue center ID
     const rescue = RESCUE_CENTERS.find(r => r.id === trimmed);
     if (rescue) return { type: 'rescue', payload: rescue };
 
-    // Match SafeSphere resource JSON: {"id":...,"type":"resource"}
     try {
         const parsed = JSON.parse(trimmed);
         if (parsed && typeof parsed.id !== 'undefined' && parsed.type === 'resource') {
@@ -45,7 +43,6 @@ function parseScannedData(data: string): { type: 'rescue' | 'url' | 'resource' |
         }
     } catch { /* not JSON */ }
 
-    // URL
     if (/^https?:\/\//i.test(trimmed)) {
         return { type: 'url', payload: trimmed };
     }
@@ -53,18 +50,22 @@ function parseScannedData(data: string): { type: 'rescue' | 'url' | 'resource' |
     return { type: 'generic', payload: trimmed };
 }
 
-/** Safely stop a running Html5Qrcode instance, awaiting completion. */
 async function safeStop(instance: Html5Qrcode | null): Promise<void> {
     if (!instance) return;
     try {
         const state = instance.getState();
-        // States: NOT_STARTED = 1, SCANNING = 2, PAUSED = 3
-        if (state === 2 || state === 3) {
+        if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
             await instance.stop();
         }
     } catch {
-        // Already stopped or in a transitional state — ignore
+        // Already stopped or transitional state
     }
+    try { instance.clear(); } catch { /* ignore */ }
+}
+
+function clearReaderElement() {
+    const el = document.getElementById(READER_ID);
+    if (el) el.innerHTML = '';
 }
 
 const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
@@ -75,46 +76,66 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
     const [genericContent, setGenericContent] = useState<string | null>(null);
     const [scanResultType, setScanResultType] = useState<'rescue' | 'url' | 'resource' | 'generic' | null>(null);
     const [cameraError, setCameraError] = useState<string | null>(null);
+    const [toastMsg, setToastMsg] = useState<string | null>(null);
     const html5QrRef = useRef<Html5Qrcode | null>(null);
     const mountedRef = useRef(true);
-    const readerElRef = useRef<HTMLDivElement | null>(null);
+    const startingRef = useRef(false);
+    const onScanRef = useRef(onScan);
 
-    // Track mounted state for safe async updates
+    useEffect(() => { onScanRef.current = onScan; }, [onScan]);
     useEffect(() => {
         mountedRef.current = true;
         return () => { mountedRef.current = false; };
     }, []);
 
     const startCamera = useCallback(async () => {
-        // Wait for the DOM element — use the ref directly
-        const element = readerElRef.current || document.getElementById(READER_ID);
-        if (!element) {
-            if (mountedRef.current) {
-                setCameraError(t('scannerElementNotFound'));
-                setScanning(false);
-            }
-            return;
-        }
-
-        // Ensure any previous instance is fully stopped before creating a new one
-        await safeStop(html5QrRef.current);
-        html5QrRef.current = null;
-
-        if (!mountedRef.current) return;
+        if (startingRef.current) return;
+        startingRef.current = true;
 
         try {
-            const html5Qr = new Html5Qrcode(READER_ID);
+            await safeStop(html5QrRef.current);
+            html5QrRef.current = null;
+            clearReaderElement();
+
+            if (!mountedRef.current) return;
+
+            await new Promise(r => setTimeout(r, 150));
+            if (!mountedRef.current) return;
+
+            const el = document.getElementById(READER_ID);
+            if (!el) {
+                if (mountedRef.current) {
+                    setCameraError(t('scannerElementNotFound'));
+                    setScanning(false);
+                }
+                return;
+            }
+
+            const containerWidth = el.clientWidth || 300;
+            const qrBoxSize = Math.min(Math.floor(containerWidth * 0.75), 250);
+
+            const html5Qr = new Html5Qrcode(READER_ID, { verbose: false });
             html5QrRef.current = html5Qr;
 
-            const scanConfig = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
+            const scanConfig = {
+                fps: 10,
+                qrbox: { width: qrBoxSize, height: qrBoxSize },
+                aspectRatio: 1,
+                disableFlip: false,
+            };
 
-            const onSuccess = (decodedText: string) => {
-                safeStop(html5Qr).then(() => {
-                    html5QrRef.current = null;
-                });
+            let scanned = false;
+            const onSuccess = async (decodedText: string) => {
+                if (scanned) return;
+                scanned = true;
+
+                await safeStop(html5Qr);
+                html5QrRef.current = null;
+
                 if (!mountedRef.current) return;
-                setScanning(false);
+
                 const result = parseScannedData(decodedText);
+                setScanning(false);
                 setScannedData(decodedText);
                 setScanResultType(result.type);
                 if (result.type === 'rescue') {
@@ -122,49 +143,78 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                 } else {
                     setGenericContent(typeof result.payload === 'string' ? result.payload : decodedText);
                 }
-                onScan?.(decodedText);
+                onScanRef.current?.(decodedText);
             };
 
-            // Try rear camera first (mobile), fall back to front camera (desktop/laptop)
+            const cameras = await Html5Qrcode.getCameras();
+            if (!cameras || cameras.length === 0) {
+                throw new Error('No cameras found on this device.');
+            }
+
+            const rearCamera = cameras.find(c =>
+                /back|rear|environment/i.test(c.label)
+            );
+
             try {
-                await html5Qr.start(
-                    { facingMode: { ideal: 'environment' } },
-                    scanConfig,
-                    onSuccess,
-                    () => {}
-                );
+                if (rearCamera) {
+                    await html5Qr.start(
+                        rearCamera.id,
+                        scanConfig,
+                        onSuccess,
+                        () => {}
+                    );
+                } else {
+                    await html5Qr.start(
+                        { facingMode: { ideal: 'environment' } },
+                        scanConfig,
+                        onSuccess,
+                        () => {}
+                    );
+                }
             } catch {
-                // Rear camera failed — try front camera
                 try {
                     await html5Qr.start(
-                        { facingMode: 'user' },
+                        cameras[0].id,
                         scanConfig,
                         onSuccess,
                         () => {}
                     );
                 } catch (innerErr) {
-                    throw innerErr; // Let the outer catch handle the final error
+                    throw innerErr;
                 }
             }
         } catch (err) {
             if (!mountedRef.current) return;
             const msg = err instanceof Error ? err.message : String(err);
-            setCameraError(msg || t('cameraAccessFailed'));
+
+            let friendlyMsg = msg || t('cameraAccessFailed');
+            if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
+                friendlyMsg = 'Camera permission denied. Please allow camera access in your browser settings and try again.';
+            } else if (msg.includes('NotFoundError') || msg.includes('No cameras')) {
+                friendlyMsg = 'No camera found. Please connect a camera or use a device with a built-in camera.';
+            } else if (msg.includes('NotReadableError') || msg.includes('Could not start')) {
+                friendlyMsg = 'Camera is in use by another application. Please close other apps using the camera and try again.';
+            } else if (msg.includes('OverconstrainedError')) {
+                friendlyMsg = 'Camera does not support the required settings. Trying with default settings...';
+            }
+
+            setCameraError(friendlyMsg);
             setScanning(false);
             html5QrRef.current = null;
+        } finally {
+            startingRef.current = false;
         }
-    }, [onScan, t]);
+    }, [t]);
 
-    // Open / close effect
     useEffect(() => {
         if (!isOpen) {
             safeStop(html5QrRef.current).then(() => {
                 html5QrRef.current = null;
+                clearReaderElement();
             });
             return;
         }
 
-        // Reset state when opening
         setCameraError(null);
         setScanning(true);
         setScannedData(null);
@@ -172,15 +222,15 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
         setGenericContent(null);
         setScanResultType(null);
 
-        // Give React one frame to render the <div id={READER_ID}> before starting
-        const rafId = requestAnimationFrame(() => {
-            startCamera();
-        });
+        const timerId = setTimeout(() => {
+            if (mountedRef.current) startCamera();
+        }, 200);
 
         return () => {
-            cancelAnimationFrame(rafId);
+            clearTimeout(timerId);
             safeStop(html5QrRef.current).then(() => {
                 html5QrRef.current = null;
+                clearReaderElement();
             });
         };
     }, [isOpen, startCamera]);
@@ -192,105 +242,125 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
         setScanResultType(null);
         setCameraError(null);
         setScanning(true);
-        // One frame delay so the reader div is rendered before we access it
-        requestAnimationFrame(() => {
-            startCamera();
-        });
+        setTimeout(() => {
+            if (mountedRef.current) startCamera();
+        }, 200);
     }, [startCamera]);
+
+    const showToast = useCallback((msg: string) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(null), 2500);
+    }, []);
 
     if (!isOpen) return null;
 
     return (
         <>
             <div className="fixed inset-0 bg-black/90 z-50 transition-opacity duration-300" onClick={onClose} />
-            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md z-50">
-                <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-                    <div className="relative p-6 bg-gradient-to-br from-blue-600 to-purple-600 text-white">
+            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md z-50">
+                <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl overflow-hidden">
+                    {/* Header */}
+                    <div className="relative p-5 bg-gradient-to-br from-blue-600 to-purple-600 text-white">
                         <button
                             onClick={onClose}
-                            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30"
+                            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 active:scale-95 transition-all"
                             aria-label={t('close')}
                         >
                             <Icons.X size={20} className="text-white" />
                         </button>
                         <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                                <Icons.QrCode size={24} />
+                            <div className="w-11 h-11 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                                <Icons.QrCode size={22} />
                             </div>
                             <div>
-                                <h2 className="text-xl font-bold">{t('qrScanner')}</h2>
-                                <p className="text-sm text-white/80">{t('scanSafesphereQrCodes')}</p>
+                                <h2 className="text-lg font-bold">{t('qrScanner')}</h2>
+                                <p className="text-xs text-white/80">{t('scanSafesphereQrCodes')}</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="p-6">
+                    {/* Body */}
+                    <div className="p-5">
                         {cameraError ? (
-                            <div className="text-center py-8">
-                                <Icons.AlertTriangle size={48} className="text-amber-500 mx-auto mb-4" />
-                                <p className="text-gray-700 font-medium mb-2">{t('cameraAccessFailed')}</p>
-                                <p className="text-sm text-gray-500 mb-4">{cameraError}</p>
+                            <div className="text-center py-6">
+                                <Icons.AlertTriangle size={44} className="text-amber-500 mx-auto mb-3" />
+                                <p className="text-gray-700 dark:text-gray-200 font-medium mb-2">{t('cameraAccessFailed')}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3 px-2">{cameraError}</p>
                                 <p className="text-xs text-gray-400 mb-4">{t('cameraHttpsHint')}</p>
                                 <button
                                     onClick={handleScanAgain}
-                                    className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 inline-flex items-center gap-2"
+                                    className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all inline-flex items-center gap-2"
                                 >
                                     <Icons.RefreshCw size={16} />
                                     {t('tryAgain')}
                                 </button>
                             </div>
+
                         ) : scanning && !scannedData ? (
-                            <div className="space-y-4">
-                                <div
-                                    id={READER_ID}
-                                    ref={readerElRef}
-                                    className="rounded-2xl overflow-hidden bg-black min-h-[250px]"
-                                />
-                                <p className="text-center text-sm text-gray-600">{t('positionQrInFrame')}</p>
+                            <div className="space-y-3">
+                                <div className="relative">
+                                    <div
+                                        id={READER_ID}
+                                        className="rounded-2xl overflow-hidden bg-black w-full"
+                                        style={{ minHeight: 280 }}
+                                    />
+                                    {/* Scanning overlay with animated corners */}
+                                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                                        <div className="w-[65%] aspect-square relative">
+                                            <div className="absolute top-0 left-0 w-6 h-6 border-t-3 border-l-3 border-white rounded-tl-lg" />
+                                            <div className="absolute top-0 right-0 w-6 h-6 border-t-3 border-r-3 border-white rounded-tr-lg" />
+                                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-3 border-l-3 border-white rounded-bl-lg" />
+                                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-3 border-r-3 border-white rounded-br-lg" />
+                                            <div className="absolute left-0 right-0 h-0.5 bg-blue-400/80 animate-scan-line" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <p className="text-center text-sm text-gray-500 dark:text-gray-400">{t('positionQrInFrame')}</p>
                             </div>
+
                         ) : scannedData && (rescueCenter || genericContent !== null) ? (
                             <div className="space-y-4">
                                 {rescueCenter ? (
                                     <>
-                                        <div className="flex flex-col items-center py-4">
-                                            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                                                <Icons.CheckCircle size={40} className="text-green-600" />
+                                        <div className="flex flex-col items-center py-3">
+                                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                                                <Icons.CheckCircle size={36} className="text-green-600" />
                                             </div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-1">{t('rescueCenterFound')}</h3>
-                                            <p className="text-sm text-gray-600 text-center mb-4">{t('nearestEmergencyFacilityScanned')}</p>
-                                            <div className="w-full bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl p-5 border-2 border-blue-200">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${
+                                            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{t('rescueCenterFound')}</h3>
+                                            <p className="text-sm text-gray-500 text-center mb-3">{t('nearestEmergencyFacilityScanned')}</p>
+                                            <div className="w-full bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-800 rounded-2xl p-4 border-2 border-blue-200 dark:border-blue-800">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                                                         rescueCenter.type === 'hospital' ? 'bg-red-100 text-red-700' :
                                                         rescueCenter.type === 'police' ? 'bg-blue-100 text-blue-700' :
                                                         rescueCenter.type === 'fire' ? 'bg-orange-100 text-orange-700' :
                                                         'bg-green-100 text-green-700'
                                                     }`}>
-                                                        {rescueCenter.type === 'hospital' && <Icons.Heart size={14} />}
-                                                        {rescueCenter.type === 'police' && <Icons.Shield size={14} />}
-                                                        {rescueCenter.type === 'fire' && <Icons.Flame size={14} />}
-                                                        {rescueCenter.type === 'shelter' && <Icons.Home size={14} />}
+                                                        {rescueCenter.type === 'hospital' && <Icons.Heart size={13} />}
+                                                        {rescueCenter.type === 'police' && <Icons.Shield size={13} />}
+                                                        {rescueCenter.type === 'fire' && <Icons.Flame size={13} />}
+                                                        {rescueCenter.type === 'shelter' && <Icons.Home size={13} />}
                                                         <span className="uppercase">{rescueCenter.type}</span>
                                                     </span>
-                                                    <span className="flex items-center gap-1 text-sm font-semibold text-gray-700">
-                                                        <Icons.MapPin size={14} className="text-blue-600" />
+                                                    <span className="flex items-center gap-1 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                        <Icons.MapPin size={13} className="text-blue-600" />
                                                         {rescueCenter.distance}
                                                     </span>
                                                 </div>
-                                                <h4 className="text-lg font-bold text-gray-900 mb-3">{rescueCenter.name}</h4>
-                                                <div className="space-y-2 mb-4">
-                                                    <div className="flex items-start gap-2 text-sm text-gray-700">
-                                                        <Icons.MapPin size={16} className="text-gray-500 flex-shrink-0 mt-0.5" />
+                                                <h4 className="text-base font-bold text-gray-900 dark:text-white mb-2">{rescueCenter.name}</h4>
+                                                <div className="space-y-1.5 mb-3">
+                                                    <div className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                                        <Icons.MapPin size={15} className="text-gray-400 flex-shrink-0 mt-0.5" />
                                                         <span>{rescueCenter.address}</span>
                                                     </div>
-                                                    <div className="flex items-center gap-2 text-sm text-gray-700">
-                                                        <Icons.Phone size={16} className="text-gray-500 flex-shrink-0" />
+                                                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                                        <Icons.Phone size={15} className="text-gray-400 flex-shrink-0" />
                                                         <a href={`tel:${rescueCenter.phone}`} className="text-blue-600 font-semibold hover:underline">
                                                             {rescueCenter.phone}
                                                         </a>
                                                     </div>
                                                 </div>
-                                                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                                                     rescueCenter.status === 'available' ? 'bg-green-100 text-green-700' :
                                                     rescueCenter.status === 'busy' ? 'bg-yellow-100 text-yellow-700' :
                                                     'bg-red-100 text-red-700'
@@ -301,39 +371,36 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                                                     } animate-pulse`} />
                                                     {rescueCenter.status.toUpperCase()}
                                                 </div>
-                                                <div className="mt-4 pt-3 border-t border-gray-200">
-                                                    <div className="text-xs text-gray-500">{t('qrCodeId')}</div>
-                                                    <div className="font-mono text-xs text-gray-600 break-all">{scannedData}</div>
+                                                <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                                    <div className="text-xs text-gray-400">{t('qrCodeId')}</div>
+                                                    <div className="font-mono text-xs text-gray-500 break-all">{scannedData}</div>
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <button
                                                 onClick={handleScanAgain}
-                                                className="py-3 bg-gray-100 text-gray-900 rounded-xl font-semibold hover:bg-gray-200 flex items-center justify-center gap-2"
+                                                className="py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all flex items-center justify-center gap-2"
                                             >
-                                                <Icons.QrCode size={18} />
+                                                <Icons.QrCode size={17} />
                                                 {t('scanAgain')}
                                             </button>
-                                            <button
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(rescueCenter.phone).catch(() => {});
-                                                    alert(t('phoneNumberCopied'));
-                                                }}
-                                                className="py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
+                                            <a
+                                                href={`tel:${rescueCenter.phone}`}
+                                                className="py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
                                             >
-                                                <Icons.Phone size={18} />
+                                                <Icons.Phone size={17} />
                                                 {t('callNow')}
-                                            </button>
+                                            </a>
                                         </div>
                                     </>
                                 ) : (
-                                    <div className="py-6">
-                                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                            <Icons.CheckCircle size={32} className="text-blue-600" />
+                                    <div className="py-4">
+                                        <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <Icons.CheckCircle size={30} className="text-blue-600" />
                                         </div>
-                                        <h3 className="text-lg font-bold text-gray-900 text-center mb-2">{t('qrCodeScanned')}</h3>
-                                        <div className="bg-gray-50 rounded-xl p-4 mb-4 font-mono text-sm text-gray-700 break-all">
+                                        <h3 className="text-lg font-bold text-gray-900 dark:text-white text-center mb-2">{t('qrCodeScanned')}</h3>
+                                        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 mb-3 font-mono text-sm text-gray-700 dark:text-gray-300 break-all max-h-32 overflow-auto">
                                             {genericContent}
                                         </div>
                                         {scanResultType === 'url' && genericContent && (
@@ -341,32 +408,58 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                                                 href={genericContent}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="block w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-center hover:bg-blue-700 mb-3"
+                                                className="block w-full py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-center hover:bg-blue-700 active:scale-95 transition-all mb-3"
                                             >
                                                 {t('openUrl')}
                                             </a>
                                         )}
                                         {scanResultType === 'resource' && (
-                                            <p className="text-sm text-green-700 bg-green-50 rounded-lg p-3 mb-3 text-center font-medium">
+                                            <p className="text-sm text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400 rounded-lg p-3 mb-3 text-center font-medium">
                                                 {t('resourceDetectedNavigating')}
                                             </p>
                                         )}
                                         <button
                                             onClick={handleScanAgain}
-                                            className="w-full py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300"
+                                            className="w-full py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
                                         >
                                             {t('scanAgain')}
                                         </button>
                                     </div>
                                 )}
-                                <button onClick={onClose} className="w-full py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300">
+                                <button
+                                    onClick={onClose}
+                                    className="w-full py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all"
+                                >
                                     {t('close')}
                                 </button>
                             </div>
                         ) : null}
                     </div>
                 </div>
+
+                {/* Toast notification */}
+                {toastMsg && (
+                    <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-4 py-2 rounded-full shadow-lg animate-fade-in whitespace-nowrap">
+                        {toastMsg}
+                    </div>
+                )}
             </div>
+
+            {/* Scan-line animation */}
+            <style>{`
+                @keyframes scanLine {
+                    0% { top: 0; }
+                    50% { top: 100%; }
+                    100% { top: 0; }
+                }
+                .animate-scan-line {
+                    position: absolute;
+                    animation: scanLine 2.5s ease-in-out infinite;
+                }
+                .border-3 { border-width: 3px; }
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+                .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+            `}</style>
         </>
     );
 };
