@@ -59,7 +59,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# ── Editor / IDE ──────────────────────────────────
+# ── Editor / IDE (do not commit Cursor agent or config) ─
+.cursor/
+cursor-agent/
+*.cursoragent
 .vscode/*
 !.vscode/extensions.json
 .idea/

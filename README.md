@@ -114,15 +114,56 @@ For online mode with real data:
 
 See `backend/supabase/README.md` for details.
 
+### Real users: Auth, 2FA & Face ID
+
+- **Demo accounts** (e.g. `reporter@safesphere.app`) use mock auth only; no Supabase Auth required.
+- **Real users** (any other email) sign in with **Supabase Auth** when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
+- In the Supabase dashboard: **Authentication → Providers → Email** enable "Confirm email" if you want verification; otherwise users can sign in right after sign-up.
+- Create real users either:
+  - In **Authentication → Users → Add user**, or
+  - By using the app’s **Request Account** flow (if wired to Supabase sign-up) or your own registration.
+- **2FA (TOTP):** Real users can enable 2FA in **Settings → Security → Two-Factor Authentication → Enable 2FA**. They scan the QR code with an authenticator app (Google Authenticator, Authy, etc.) and enter a code to verify. Supabase MFA is enabled by default.
+- **Face ID / Touch ID:** Real users can turn on **Enable Face ID** in the same Security section. Changes to 2FA and Face ID use **Save** / **Discard** (like Language and Theme) so you can confirm before applying. When Face ID is enabled and the WebAuthn Edge Function is deployed, the **Face ID** and **Touch ID** buttons on the login page trigger the device’s biometric prompt (Face ID on iPhone, Touch ID on Mac). To enable this:
+  1. Run `backend/supabase/webauthn_tables.sql` in the Supabase SQL Editor.
+  2. Deploy the Edge Function: `supabase functions deploy webauthn`.
+  3. Set **SITE_URL** in the function’s secrets (e.g. `https://your-app.vercel.app`) so the correct `rpId` is used for WebAuthn.
+
+### Registration confirmation email (6-digit code)
+
+When users **Request Account**, the app sends a 6-digit code to their email so they can activate the account. To actually deliver that email, use your existing Supabase project (the same one in `.env.local`):
+
+1. **Install Supabase CLI** (if needed): [supabase.com/docs/guides/cli](https://supabase.com/docs/guides/cli)
+2. **Log in and link** your project:
+   - `supabase login`
+   - From `.env.local`, your `VITE_SUPABASE_URL` is like `https://YOUR_PROJECT_REF.supabase.co` — the project ref is the part before `.supabase.co`.
+   - Run: `supabase link --project-ref YOUR_PROJECT_REF`
+3. **Deploy the function**: `npm run deploy:confirmation-email` (or `supabase functions deploy send-confirmation-email`).
+4. **Create a Resend API key** at [resend.com](https://resend.com) (free tier: 100 emails/day), then set the secret:  
+   `supabase secrets set RESEND_API_KEY=re_xxxxxxxxx`
+5. Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set in `.env.local` so the app can call the function.
+
+Emails are sent from `SafeSphere <onboarding@resend.dev>` until you add and verify your own domain in Resend.
+
+**Not receiving the confirmation email?**
+
+1. **Deploy the Edge Function** — The app only sends email if the function is deployed: `npm run deploy:confirmation-email` (after `supabase link`).
+2. **Set the Resend secret** — In Supabase: **Project → Edge Functions → send-confirmation-email → Secrets**, add `RESEND_API_KEY` with your key from [resend.com](https://resend.com). Or run: `supabase secrets set RESEND_API_KEY=re_xxxxxxxxx`.
+3. **Check spam** — The first email may land in spam; add `onboarding@resend.dev` to your contacts or mark as “Not spam”.
+4. **Development fallback** — When running locally (`npm run dev`), the activation screen shows a yellow box with your 6-digit code so you can complete signup without email. Use that code to activate your account while testing.
+5. **Resend limits** — Free tier allows 100 emails/day; ensure your Resend account is verified and the “to” address is valid.
+
 ---
 
 ## Pushing to the repository
 
-Before you push, ensure **no sensitive data** is committed:
+Push **only source and functional code**. No sensitive data, no Cursor agent or IDE-only files. See **`PUSH_GUIDELINES.md`** for the same rules in **English**, **German (DE)**, and **Myanmar (MY)**.
 
-- **Do not commit** `.env`, `.env.local`, or any file containing API keys (Supabase, Gemini, etc.)
+Before you push:
+
+- **Do not commit** `.env`, `.env.local`, or any file containing API keys (Supabase, Gemini, Resend, etc.)
 - **Do not commit** documents such as `.docx`, `.pdf`, or other confidential reports
-- The repo `.gitignore` already excludes: `.env` files, `*.pdf`, `*.docx`, `secrets/`, and similar
+- **Do not commit** `.cursor/`, `cursor-agent/`, or other Cursor/IDE-only files — the repo should not contain these
+- The repo `.gitignore` already excludes: `.env*` (except `.env.example`), `*.pdf`, `*.docx`, `secrets/`, `.cursor/`, and similar
 
 Use `.env.example` (without real keys) as a template for other developers.
 

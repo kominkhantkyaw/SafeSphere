@@ -2,6 +2,7 @@
 import { MOCK_ALERTS, MOCK_CHECKLIST, MOCK_DRILLS, MOCK_INJURIES, MOCK_INVENTORY, MOCK_LEARN_ITEMS, MOCK_REPORTS, MOCK_RESOURCES, MOCK_TUTORIALS, MOCK_USER } from '../constants';
 import type { Alert, ChecklistItem, DrillSession, IncidentReport, InjuryCase, InventoryItem, LearnItem, Resource, Tutorial, User, EarthquakeEvent, SafetyAsset } from '../types';
 import { supabase, isSupabaseReady } from './supabase';
+import { isDemoUser, signInWithSupabase } from './auth';
 
 const USE_MOCK_DATA = true; // Set to false to use PHP Backend
 const API_URL = 'https://safesphere.app/api/api.php';
@@ -52,13 +53,26 @@ export const DEMO_CREDENTIALS: Array<{ email: string; password: string; user: Us
     { email: 'viewer@safesphere.app', password: 'viewer123', user: { id: 4, name: 'Viewer', role: 'Viewer', safetyScore: 50, xp: 100, email: 'viewer@safesphere.app', bloodType: 'A+', volunteerPoints: 20, permissions: [] } }
 ];
 
-/** Authenticate by email and password. Returns user if valid, null otherwise. */
-export const authenticate = async (email: string, password: string): Promise<{ success: boolean; user?: User; message?: string }> => {
+/** Authenticate by email and password. Demo users: mock auth. Real users: Supabase Auth (may return requiresMfa). */
+export const authenticate = async (
+    email: string,
+    password: string
+): Promise<{ success: boolean; user?: User; message?: string; requiresMfa?: boolean }> => {
     const emailNorm = email.trim().toLowerCase();
-    const cred = DEMO_CREDENTIALS.find(c => c.email.toLowerCase() === emailNorm);
-    if (!cred) return { success: false, message: 'Invalid email or password.' };
-    if (cred.password !== password) return { success: false, message: 'Invalid email or password.' };
-    return { success: true, user: cred.user };
+    if (isDemoUser(emailNorm)) {
+        const cred = DEMO_CREDENTIALS.find(c => c.email.toLowerCase() === emailNorm);
+        if (!cred || cred.password !== password) return { success: false, message: 'Invalid email or password.' };
+        return { success: true, user: cred.user };
+    }
+    if (isSupabaseReady()) {
+        const result = await signInWithSupabase(email, password);
+        if (result.success && 'requiresMfa' in result) {
+            return { success: true, user: result.user, requiresMfa: result.requiresMfa };
+        }
+        if (result.success) return { success: true, user: result.user };
+        return { success: false, message: result.message };
+    }
+    return { success: false, message: 'Invalid email or password.' };
 };
 
 export const fetchAllUsers = async (): Promise<User[]> => {
@@ -203,6 +217,10 @@ export const requestAccount = async (data: {
     if (data.password.length < 6) {
         return { success: false, message: 'Password must be at least 6 characters.' };
     }
+    const phoneTrim = data.phone.trim();
+    if (!phoneTrim) {
+        return { success: false, message: 'Please enter your phone number (with country code).' };
+    }
 
     const token = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
@@ -221,14 +239,36 @@ export const requestAccount = async (data: {
     const filtered = all.filter(p => p.email.toLowerCase() !== emailNorm);
     setCached(PENDING_REG_KEY, [...filtered, pending]);
 
+    // Send confirmation email via Supabase Edge Function (Resend)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (supabaseUrl && anonKey) {
+        try {
+            const res = await fetch(`${supabaseUrl}/functions/v1/send-confirmation-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${anonKey}`,
+                },
+                body: JSON.stringify({ email: data.email.trim(), code: token }),
+            });
+            const result = await res.json().catch(() => ({})) as { success?: boolean; message?: string };
+            if (!result.success && process.env.NODE_ENV === 'development') {
+                console.warn('[Demo] Confirmation email failed:', result.message || res.status);
+            }
+        } catch (err) {
+            if (process.env.NODE_ENV === 'development') {
+                console.warn('[Demo] Could not send confirmation email:', err);
+            }
+        }
+    }
     if (process.env.NODE_ENV === 'development') {
-        console.log('[Demo] Confirmation email would be sent to:', data.email);
-        console.log('[Demo] Confirm token:', token);
+        console.log('[Demo] 6-digit code sent to email:', data.email, '; also log for testing:', token);
     }
 
     return {
         success: true,
-        message: `A confirmation email has been sent to ${data.email}. Please check your inbox and click the link to activate your account.`,
+        message: `We've sent a 6-digit code to your email and phone. Enter it below to activate your account.`,
     };
 };
 
@@ -238,11 +278,11 @@ export const confirmAccount = async (email: string, token: string): Promise<{ su
     const all = getCached<PendingRegistration[]>(PENDING_REG_KEY) || [];
     const pending = all.find(p => p.email.toLowerCase() === emailNorm && p.token === token);
     if (!pending) {
-        return { success: false, message: 'Invalid or expired confirmation link. Please request a new account.' };
+        return { success: false, message: 'Invalid or expired code. Please check the 6-digit code or request a new one.' };
     }
     if (Date.now() > pending.expiresAt) {
         setCached(PENDING_REG_KEY, all.filter(p => p.email.toLowerCase() !== emailNorm));
-        return { success: false, message: 'Confirmation link has expired. Please request a new account.' };
+        return { success: false, message: 'Your code has expired. Please request a new account.' };
     }
 
     const users = await fetchAllUsers();

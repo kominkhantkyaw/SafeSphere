@@ -1,13 +1,17 @@
 
 
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Icons } from '../components/Icon';
 import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
+import { FaceScanModal } from '../components/FaceScanModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ThemeSettings } from '../types';
 import { requestAccount, confirmAccount, getPendingRegistration, authenticate } from '../services/api';
+import { completeMfaChallenge, getSupabaseSessionUser, isDemoUser } from '../services/auth';
+import { isWebAuthnAvailable, getWebAuthnAuthOptions, verifyWebAuthnAssertion } from '../services/webauthn';
 import { User } from '../types';
+import { COUNTRY_CODES } from '../constants';
 
 interface LoginProps {
     onLogin: (role: 'Admin' | 'Responder' | 'Viewer' | 'Reporter', user?: User) => void;
@@ -23,6 +27,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
     const [loginError, setLoginError] = useState<string | null>(null);
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [pendingEmail, setPendingEmail] = useState('');
+    const [confirmationCode, setConfirmationCode] = useState('');
     
     // Defaults for demo — use Reporter (limited privileges) for safety
     const [email, setEmail] = useState('reporter@safesphere.app');
@@ -33,9 +38,18 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
     const [lastName, setLastName] = useState('');
     const [username, setUsername] = useState('');
     const [regEmail, setRegEmail] = useState('');
-    const [phone, setPhone] = useState('');
+    const [phoneCountryCode, setPhoneCountryCode] = useState('+43');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [regPassword, setRegPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+
+    // MFA challenge step for real (Supabase) users with 2FA enabled
+    const [showMfaChallenge, setShowMfaChallenge] = useState(false);
+    const [mfaCode, setMfaCode] = useState('');
+    const [mfaError, setMfaError] = useState<string | null>(null);
+
+    // Face ID: camera-based face scan (like QR Scanner)
+    const [showFaceScan, setShowFaceScan] = useState(false);
 
     const handleLogin = async (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -44,6 +58,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
         const res = await authenticate(email, password);
         setLoading(false);
         if (res.success && res.user) {
+            if (res.requiresMfa) {
+                setShowMfaChallenge(true);
+                setMfaError(null);
+                setMfaCode('');
+                return;
+            }
             alert(t('signInSuccess'));
             onLogin(res.user.role, res.user);
         } else {
@@ -51,21 +71,113 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
         }
     };
 
-    const handleBiometric = async (type: 'face' | 'fingerprint') => {
-        if (type === 'face') {
-            const twoFaOn = localStorage.getItem('safesphere_2fa_enabled') === '1';
-            const faceIdOn = localStorage.getItem('safesphere_faceid_enabled') === '1';
-            if (!twoFaOn || !faceIdOn) {
-                setLoginError(t('faceIdRequirementError'));
-                return;
-            }
+    const handleMfaSubmit = async (e?: React.FormEvent) => {
+        e?.preventDefault();
+        setMfaError(null);
+        if (!mfaCode.trim()) {
+            setMfaError(t('mfaCodeRequired') || 'Enter the code from your authenticator app.');
+            return;
         }
+        setLoading(true);
+        const result = await completeMfaChallenge(mfaCode);
+        setLoading(false);
+        if (result.success) {
+            const user = await getSupabaseSessionUser();
+            if (user) {
+                alert(t('signInSuccess'));
+                onLogin(user.role, user);
+            } else {
+                setMfaError(t('invalidCredentials') || 'Session error. Please sign in again.');
+            }
+        } else {
+            setMfaError(result.message || t('invalidCredentials'));
+        }
+    };
+
+    // Face ID: open camera, detect face, then sign in with form credentials
+    const handleFaceIdClick = () => {
+        const twoFaOn = localStorage.getItem('safesphere_2fa_enabled') === '1';
+        const faceIdOn = localStorage.getItem('safesphere_faceid_enabled') === '1';
+        if (!twoFaOn || !faceIdOn) {
+            setLoginError(t('faceIdRequirementError'));
+            return;
+        }
+        setLoginError(null);
+        setShowFaceScan(true);
+    };
+
+    const handleFaceScanSuccess = useCallback(() => {
+        setShowFaceScan(false);
         setAuthMethod('biometric');
         setLoading(true);
-        // Biometric uses stored credentials - try current email/password first
+        (async () => {
+            const res = await authenticate(email, password);
+            setLoading(false);
+            if (res.success && res.user) {
+                if (res.requiresMfa) {
+                    setShowMfaChallenge(true);
+                    setMfaError(null);
+                    setMfaCode('');
+                    return;
+                }
+                alert(t('signInSuccess'));
+                onLogin(res.user.role, res.user);
+            } else {
+                setLoginError(t('biometricFailed'));
+            }
+        })();
+    }, [email, password, onLogin, t]);
+
+    // Touch ID / fingerprint: use system biometric (WebAuthn on MacBook) or password fallback
+    const handleBiometric = async (type: 'face' | 'fingerprint') => {
+        if (type === 'face') {
+            handleFaceIdClick();
+            return;
+        }
+        const twoFaOn = localStorage.getItem('safesphere_2fa_enabled') === '1';
+        const faceIdOn = localStorage.getItem('safesphere_faceid_enabled') === '1';
+        if (type === 'fingerprint' && (!twoFaOn || !faceIdOn)) {
+            setLoginError(t('faceIdRequirementError'));
+            return;
+        }
+        setAuthMethod('biometric');
+        setLoginError(null);
+        setLoading(true);
+
+        // Real users: try WebAuthn so the device prompts for fingerprint (Touch ID on MacBook)
+        if (!isDemoUser(email) && isWebAuthnAvailable()) {
+            const opts = await getWebAuthnAuthOptions(email);
+            if (opts.success) {
+                try {
+                    const credential = await navigator.credentials.get({ publicKey: opts.options }) as PublicKeyCredential | null;
+                    if (credential) {
+                        const verify = await verifyWebAuthnAssertion(email, credential);
+                        setLoading(false);
+                        if (verify.success && verify.magicLink) {
+                            window.location.href = verify.magicLink;
+                            return;
+                        }
+                        setLoginError(verify.success ? t('biometricFailed') : (verify as { message?: string }).message || t('biometricFailed'));
+                        return;
+                    }
+                } catch (err) {
+                    setLoading(false);
+                    setLoginError(t('biometricFailed'));
+                    return;
+                }
+            }
+        }
+
+        // Demo users or WebAuthn unavailable: use password (form credentials)
         const res = await authenticate(email, password);
         setLoading(false);
         if (res.success && res.user) {
+            if (res.requiresMfa) {
+                setShowMfaChallenge(true);
+                setMfaError(null);
+                setMfaCode('');
+                return;
+            }
             alert(t('signInSuccess'));
             onLogin(res.user.role, res.user);
         } else {
@@ -84,18 +196,24 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
             setRegisterError(t('passwordMinLength'));
             return;
         }
+        const fullPhone = `${phoneCountryCode} ${phoneNumber.trim()}`.trim();
+        if (!phoneNumber.trim()) {
+            setRegisterError(t('phoneRequired') || 'Please enter your phone number.');
+            return;
+        }
         setLoading(true);
         const res = await requestAccount({
             firstName,
             lastName,
             username,
             email: regEmail,
-            phone,
+            phone: fullPhone,
             password: regPassword,
         });
         setLoading(false);
         if (res.success) {
             setPendingEmail(regEmail);
+            setConfirmationCode('');
             setView('check-email');
         } else {
             setRegisterError(res.message);
@@ -103,13 +221,18 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
     };
 
     const handleConfirmAndSignIn = async () => {
+        const code = confirmationCode.replace(/\D/g, '');
+        if (code.length !== 6) {
+            setRegisterError(t('enter6DigitCode') || 'Please enter the 6-digit code we sent to your email and phone.');
+            return;
+        }
         const pending = getPendingRegistration(pendingEmail);
         if (!pending) {
             setRegisterError(t('noPendingRegistration'));
             return;
         }
         setLoading(true);
-        const res = await confirmAccount(pendingEmail, pending.token);
+        const res = await confirmAccount(pendingEmail, code);
         setLoading(false);
         if (res.success && res.user) {
             alert(t('signInSuccess'));
@@ -170,7 +293,48 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                     </div>
                 ) : (
                     <>
-                        {view === 'login' ? (
+                        {view === 'login' && showMfaChallenge ? (
+                            <div className="space-y-4">
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowMfaChallenge(false); setMfaCode(''); setMfaError(null); }}
+                                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+                                >
+                                    <Icons.ChevronLeft size={18} />
+                                    {t('backToSignIn')}
+                                </button>
+                                <div className="flex justify-center">
+                                    <div className="w-14 h-14 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}>
+                                        <Icons.ShieldCheck size={28} />
+                                    </div>
+                                </div>
+                                <h2 className="text-lg font-bold text-gray-900 text-center">{t('twoFactorAuthentication')}</h2>
+                                <p className="text-sm text-gray-500 text-center">{t('mfaEnterCode')}</p>
+                                <form onSubmit={handleMfaSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('mfaCodeLabel')}</label>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            value={mfaCode}
+                                            onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 text-center text-lg tracking-widest font-mono"
+                                            placeholder="000000"
+                                            maxLength={6}
+                                        />
+                                    </div>
+                                    {mfaError && <p className="text-sm text-red-600">{mfaError}</p>}
+                                    <button
+                                        type="submit"
+                                        className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90 transition-all active:scale-[0.98]"
+                                        style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}
+                                    >
+                                        {t('verify')}
+                                    </button>
+                                </form>
+                            </div>
+                        ) : view === 'login' ? (
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('emailLabel')}</label>
@@ -246,8 +410,31 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 </div>
                                 <h2 className="text-lg font-bold text-gray-900 text-center">{t('checkYourEmail')}</h2>
                                 <p className="text-sm text-gray-500 text-center">
-                                    {t('confirmationEmailSent')}
+                                    {t('confirmationCodeSentEmailAndSms')}
                                 </p>
+                                <p className="text-xs text-gray-400 text-center">
+                                    {t('didNotReceiveCode')}
+                                </p>
+                                {import.meta.env.DEV && (() => {
+                                    const pending = getPendingRegistration(pendingEmail);
+                                    return pending?.token ? (
+                                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-center font-mono" role="status">
+                                            Development: Your code is <strong>{pending.token}</strong>
+                                        </p>
+                                    ) : null;
+                                })()}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('enter6DigitCode')}</label>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                        value={confirmationCode}
+                                        onChange={(e) => setConfirmationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        placeholder={t('activationCodePlaceholder')}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-center text-lg tracking-[0.4em] font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                                    />
+                                </div>
                                 {registerError && <p className="text-sm text-red-600 text-center">{registerError}</p>}
                                 <button
                                     type="button"
@@ -256,11 +443,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-70"
                                     style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}
                                 >
-                                    {loading ? t('confirming') : t('confirmAndSignIn')}
+                                    {loading ? t('confirming') : t('activateAccount')}
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => { setView('register'); setRegisterError(null); }}
+                                    onClick={() => { setView('register'); setRegisterError(null); setConfirmationCode(''); }}
                                     className="w-full py-2 text-sm text-gray-500 hover:text-gray-700"
                                 >
                                     {t('useDifferentEmail')}
@@ -279,32 +466,51 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('firstName')}</label>
-                                        <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="John" />
+                                        <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="Mini" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('lastName')}</label>
-                                        <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="Doe" />
+                                        <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="Max" />
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('username')}</label>
                                     <div className="relative">
                                         <Icons.User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="johndoe" />
+                                        <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder={t('usernamePlaceholder')} />
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('emailLabel')}</label>
                                     <div className="relative">
                                         <Icons.Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="john@safesphere.app" />
+                                        <input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder={t('registrationEmailPlaceholder')} />
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('phone')}</label>
-                                    <div className="relative">
-                                        <Icons.Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="+1 555 0123" />
+                                    <div className="flex gap-0 rounded-xl border border-gray-200 bg-white overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition-colors">
+                                        <select
+                                            value={phoneCountryCode}
+                                            onChange={(e) => setPhoneCountryCode(e.target.value)}
+                                            className="shrink-0 pl-2 pr-1 py-3 bg-gray-50 border-r border-gray-200 text-gray-700 font-medium outline-none cursor-pointer appearance-none text-sm"
+                                            title={t('countryCodeLabel')}
+                                        >
+                                            {COUNTRY_CODES.map(({ code, label }) => (
+                                                <option key={code} value={code}>{label}</option>
+                                            ))}
+                                        </select>
+                                        <div className="relative flex-1 flex items-center">
+                                            <Icons.Phone className="absolute left-3 text-gray-400" size={18} />
+                                            <input
+                                                type="tel"
+                                                value={phoneNumber}
+                                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                                required
+                                                className="w-full pl-10 pr-4 py-3 outline-none"
+                                                placeholder={t('phoneNumberPlaceholder')}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                                 <div>
@@ -366,6 +572,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                 onClose={() => setShowForgotPassword(false)}
                 onSuccess={() => setShowForgotPassword(false)}
                 primaryColor={isDefaultBlue ? '#2563eb' : primaryColor}
+            />
+
+            <FaceScanModal
+                isOpen={showFaceScan}
+                onClose={() => setShowFaceScan(false)}
+                onSuccess={handleFaceScanSuccess}
             />
         </div>
     );

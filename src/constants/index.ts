@@ -1,5 +1,39 @@
 import { Alert, ChecklistItem, DrillSession, IncidentReport, InjuryCase, InventoryItem, LearnItem, Resource, Tutorial, User } from '../types';
 
+/** International phone country codes for registration and forms */
+export const COUNTRY_CODES: ReadonlyArray<{ code: string; label: string }> = [
+    { code: '+43', label: '🇦🇹 +43 (Austria)' },
+    { code: '+44', label: '🇬🇧 +44 (UK)' },
+    { code: '+49', label: '🇩🇪 +49 (Germany)' },
+    { code: '+95', label: '🇲🇲 +95 (Myanmar)' },
+    { code: '+1', label: '🇺🇸 +1 (US/Canada)' },
+    { code: '+33', label: '🇫🇷 +33 (France)' },
+    { code: '+39', label: '🇮🇹 +39 (Italy)' },
+    { code: '+41', label: '🇨🇭 +41 (Switzerland)' },
+    { code: '+34', label: '🇪🇸 +34 (Spain)' },
+    { code: '+31', label: '🇳🇱 +31 (Netherlands)' },
+    { code: '+46', label: '🇸🇪 +46 (Sweden)' },
+    { code: '+47', label: '🇳🇴 +47 (Norway)' },
+    { code: '+48', label: '🇵🇱 +48 (Poland)' },
+    { code: '+81', label: '🇯🇵 +81 (Japan)' },
+    { code: '+82', label: '🇰🇷 +82 (South Korea)' },
+    { code: '+86', label: '🇨🇳 +86 (China)' },
+    { code: '+91', label: '🇮🇳 +91 (India)' },
+    { code: '+61', label: '🇦🇺 +61 (Australia)' },
+    { code: '+65', label: '🇸🇬 +65 (Singapore)' },
+    { code: '+66', label: '🇹🇭 +66 (Thailand)' },
+    { code: '+60', label: '🇲🇾 +60 (Malaysia)' },
+    { code: '+63', label: '🇵🇭 +63 (Philippines)' },
+    { code: '+84', label: '🇻🇳 +84 (Vietnam)' },
+    { code: '+62', label: '🇮🇩 +62 (Indonesia)' },
+    { code: '+7', label: '🇷🇺 +7 (Russia)' },
+    { code: '+90', label: '🇹🇷 +90 (Turkey)' },
+    { code: '+971', label: '🇦🇪 +971 (UAE)' },
+    { code: '+966', label: '🇸🇦 +966 (Saudi Arabia)' },
+    { code: '+20', label: '🇪🇬 +20 (Egypt)' },
+    { code: '+27', label: '🇿🇦 +27 (South Africa)' },
+];
+
 /** FLOOD zones: Yangon River (west) + Ywar Thit / Zhanlyin (east) */
 export const FLOOD_ZONES_YANGON: ReadonlyArray<{ lat: number; lng: number; label?: string }> = [
     { lat: 16.776, lng: 96.122, label: 'Yangon River – between Dala and Yangon Fire Station (west part)' },

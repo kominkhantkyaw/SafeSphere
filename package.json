@@ -12,7 +12,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "analyze": "ANALYZE=true npm run build && node scripts/apply-analyzer-colours.mjs",
-    "analyse": "ANALYZE=true npm run build && node scripts/apply-analyzer-colours.mjs"
+    "analyse": "ANALYZE=true npm run build && node scripts/apply-analyzer-colours.mjs",
+    "deploy:confirmation-email": "supabase functions deploy send-confirmation-email"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

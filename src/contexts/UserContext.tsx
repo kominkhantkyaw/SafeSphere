@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User } from '../types';
 import { encryptData, decryptData, sanitiseUserForStorage } from '../services/crypto';
+import { signOutSupabase } from '../services/auth';
 
 const STORAGE_KEY = 'safesphere_user_enc';
 
@@ -73,6 +74,7 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
     const logout = () => {
         setUser(null);
+        signOutSupabase();
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem('safesphere_user');
         localStorage.removeItem('safesphere_token');

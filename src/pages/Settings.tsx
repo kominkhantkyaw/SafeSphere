@@ -1,8 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icons } from '../components/Icon';
 import { useUser } from '../contexts/UserContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ThemeSettings as ThemeSettingsType, ThemeMode } from '../types';
+import { supabase } from '../services/supabase';
+import {
+    enrollMfa,
+    verifyMfaEnrollment,
+    listMfaFactors,
+    unenrollMfa,
+    setFaceIdEnabled as setFaceIdEnabledSupabase,
+    getFaceIdEnabled,
+    isDemoUser,
+} from '../services/auth';
+import {
+    isWebAuthnAvailable,
+    getWebAuthnRegisterOptions,
+    verifyWebAuthnRegistration,
+} from '../services/webauthn';
 
 interface SettingsProps {
     onBack?: () => void;
@@ -67,21 +82,144 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
     const [passwordError, setPasswordError] = useState('');
     const [passwordSuccess, setPasswordSuccess] = useState(false);
 
-    // 2FA & Face ID - persist to localStorage for Login to check
+    // 2FA & Face ID — demo: localStorage; real users: Supabase (MFA + user_metadata)
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(() => localStorage.getItem('safesphere_2fa_enabled') === '1');
     const [faceIdEnabled, setFaceIdEnabled] = useState(() => localStorage.getItem('safesphere_faceid_enabled') === '1');
+    const [isSupabaseUser, setIsSupabaseUser] = useState(false);
+    const [loadingSupabaseSecurity, setLoadingSupabaseSecurity] = useState(false);
+    // Pending Security changes (like language/theme) — apply only on Save
+    const [pendingTwoFactor, setPendingTwoFactor] = useState<boolean | null>(null);
+    const [pendingFaceId, setPendingFaceId] = useState<boolean | null>(null);
+    const [securityPopupMessage, setSecurityPopupMessage] = useState<string | null>(null);
+    // 2FA enrollment modal (Supabase real users only)
+    const [showEnrollMfa, setShowEnrollMfa] = useState(false);
+    const [mfaEnrollFactorId, setMfaEnrollFactorId] = useState('');
+    const [mfaEnrollQrSvg, setMfaEnrollQrSvg] = useState('');
+    const [mfaEnrollCode, setMfaEnrollCode] = useState('');
+    const [mfaEnrollError, setMfaEnrollError] = useState<string | null>(null);
+    const [mfaEnrollLoading, setMfaEnrollLoading] = useState(false);
+
+    // Display values for Security toggles (pending overrides saved)
+    const twoFactorDisplay = pendingTwoFactor ?? twoFactorEnabled;
+    const faceIdDisplay = pendingFaceId ?? faceIdEnabled;
+    const hasSecurityChanges = pendingTwoFactor !== null || pendingFaceId !== null;
+
+    // Detect Supabase user and load 2FA / Face ID state from Supabase when on Security tab
+    useEffect(() => {
+        if (!user?.email || isDemoUser(user.email)) return;
+        if (activeTab !== 'security' || !supabase) return;
+        let cancelled = false;
+        setLoadingSupabaseSecurity(true);
+        setPendingTwoFactor(null);
+        setPendingFaceId(null);
+        (async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (cancelled) return;
+            if (session?.user?.email?.toLowerCase() === user.email?.toLowerCase()) {
+                setIsSupabaseUser(true);
+                const factors = await listMfaFactors();
+                if (factors.success && factors.totp.length > 0) setTwoFactorEnabled(true);
+                const faceOn = await getFaceIdEnabled();
+                setFaceIdEnabled(faceOn);
+            } else {
+                setIsSupabaseUser(false);
+            }
+            setLoadingSupabaseSecurity(false);
+        })();
+        return () => { cancelled = true; };
+    }, [user?.email, activeTab]);
 
     const handleToggle2FA = () => {
-        const next = !twoFactorEnabled;
-        setTwoFactorEnabled(next);
-        localStorage.setItem('safesphere_2fa_enabled', next ? '1' : '0');
+        setPendingTwoFactor(!twoFactorDisplay);
     };
 
     const handleToggleFaceId = () => {
-        const next = !faceIdEnabled;
-        setFaceIdEnabled(next);
-        localStorage.setItem('safesphere_faceid_enabled', next ? '1' : '0');
+        setPendingFaceId(!faceIdDisplay);
     };
+
+    const handleSaveSecurity = async () => {
+        if (pendingTwoFactor !== null) {
+            if (isSupabaseUser) {
+                if (pendingTwoFactor) {
+                    const res = await enrollMfa();
+                    if (res.success) {
+                        setMfaEnrollFactorId(res.factorId);
+                        setMfaEnrollQrSvg(res.qrCodeSvg);
+                        setMfaEnrollCode('');
+                        setMfaEnrollError(null);
+                        setShowEnrollMfa(true);
+                    }
+                } else {
+                    const factors = await listMfaFactors();
+                    if (factors.success && factors.totp[0]) {
+                        const res = await unenrollMfa(factors.totp[0].id);
+                        if (res.success) {
+                            setTwoFactorEnabled(false);
+                            setSecurityPopupMessage(t('twoFactorDisabled'));
+                        }
+                    }
+                    setPendingTwoFactor(null);
+                }
+            } else {
+                setTwoFactorEnabled(pendingTwoFactor);
+                localStorage.setItem('safesphere_2fa_enabled', pendingTwoFactor ? '1' : '0');
+                setPendingTwoFactor(null);
+                setSecurityPopupMessage(pendingTwoFactor ? t('twoFactorActivated') : t('twoFactorDisabled'));
+            }
+        }
+        if (pendingFaceId !== null) {
+            if (isSupabaseUser) {
+                const res = await setFaceIdEnabledSupabase(pendingFaceId);
+                if (res.success) {
+                    setFaceIdEnabled(pendingFaceId);
+                    if (pendingFaceId && isWebAuthnAvailable()) {
+                        try {
+                            const opts = await getWebAuthnRegisterOptions();
+                            if (opts.success && opts.options.publicKey) {
+                                const credential = await navigator.credentials.create(opts.options) as PublicKeyCredential | null;
+                                if (credential) {
+                                    await verifyWebAuthnRegistration(credential);
+                                }
+                            }
+                        } catch {
+                            // WebAuthn registration optional; metadata already set
+                        }
+                    }
+                    setSecurityPopupMessage(pendingFaceId ? t('faceIdActivated') : t('faceIdDisabled'));
+                }
+            } else {
+                setFaceIdEnabled(pendingFaceId);
+                localStorage.setItem('safesphere_faceid_enabled', pendingFaceId ? '1' : '0');
+                setSecurityPopupMessage(pendingFaceId ? t('faceIdActivated') : t('faceIdDisabled'));
+            }
+            setPendingFaceId(null);
+        }
+    };
+
+    const handleDiscardSecurity = () => {
+        setPendingTwoFactor(null);
+        setPendingFaceId(null);
+    };
+
+    const handleVerifyMfaEnrollment = async () => {
+        if (!mfaEnrollFactorId || !mfaEnrollCode.trim()) {
+            setMfaEnrollError(t('mfaCodeRequired'));
+            return;
+        }
+        setMfaEnrollLoading(true);
+        setMfaEnrollError(null);
+        const res = await verifyMfaEnrollment(mfaEnrollFactorId, mfaEnrollCode);
+        setMfaEnrollLoading(false);
+        if (res.success) {
+            setTwoFactorEnabled(true);
+            setPendingTwoFactor(null);
+            setShowEnrollMfa(false);
+            setSecurityPopupMessage(t('twoFactorActivated'));
+        } else {
+            setMfaEnrollError(res.message || t('invalidCredentials'));
+        }
+    };
+
 
     // Active Sessions - detect current device & manage other sessions
     const getDeviceInfo = (): { device: string; browser: string } => {
@@ -1070,7 +1208,9 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
 
                         <div className="bg-white rounded-2xl shadow-md p-6">
                             <h2 className="text-lg font-bold text-gray-900 mb-4">{t('twoFactorAuthentication')}</h2>
-                            
+                            {hasSecurityChanges && (
+                                <p className="text-sm text-gray-500 mb-3">{t('saveToApply')}</p>
+                            )}
                             <div className="p-4 bg-blue-50 rounded-xl mb-4">
                                 <div className="flex items-start gap-3">
                                     <Icons.ShieldCheck size={24} className="text-blue-600 mt-1 shrink-0" />
@@ -1096,8 +1236,8 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <Icons.Fingerprint size={20} className="text-purple-600 shrink-0" />
                                         <span className="font-semibold text-gray-900">{t('enable2fa')}</span>
                                     </div>
-                                    <div className={`w-12 h-7 rounded-full transition-colors relative ${twoFactorEnabled ? 'bg-purple-500' : 'bg-gray-300'}`}>
-                                        <div className={`absolute w-5 h-5 bg-white rounded-full top-1 transition-all shadow ${twoFactorEnabled ? 'right-1' : 'left-1'}`} />
+                                    <div className={`w-12 h-7 rounded-full transition-colors relative ${twoFactorDisplay ? 'bg-purple-500' : 'bg-gray-300'}`}>
+                                        <div className={`absolute w-5 h-5 bg-white rounded-full top-1 transition-all shadow ${twoFactorDisplay ? 'right-1' : 'left-1'}`} />
                                     </div>
                                 </button>
                                 <button
@@ -1109,11 +1249,30 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                                         <Icons.ScanFace size={20} className="text-blue-600 shrink-0" />
                                         <span className="font-semibold text-gray-900">{t('enableFaceId')}</span>
                                     </div>
-                                    <div className={`w-12 h-7 rounded-full transition-colors relative ${faceIdEnabled ? 'bg-blue-500' : 'bg-gray-300'}`}>
-                                        <div className={`absolute w-5 h-5 bg-white rounded-full top-1 transition-all shadow ${faceIdEnabled ? 'right-1' : 'left-1'}`} />
+                                    <div className={`w-12 h-7 rounded-full transition-colors relative ${faceIdDisplay ? 'bg-blue-500' : 'bg-gray-300'}`}>
+                                        <div className={`absolute w-5 h-5 bg-white rounded-full top-1 transition-all shadow ${faceIdDisplay ? 'right-1' : 'left-1'}`} />
                                     </div>
                                 </button>
                             </div>
+
+                            {hasSecurityChanges && (
+                                <div className="mt-4 flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handleDiscardSecurity}
+                                        className="flex-1 py-3 rounded-xl border border-gray-200 font-semibold text-gray-700 hover:bg-gray-50"
+                                    >
+                                        {t('discard')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveSecurity}
+                                        className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                                    >
+                                        {t('saveChanges')}
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         <div className="bg-white rounded-2xl shadow-md p-6">
@@ -1158,6 +1317,78 @@ const Settings: React.FC<SettingsProps> = ({ onBack, onNavigate, theme: appTheme
                     </div>
                 )}
             </div>
+
+            {/* Security confirmation popup (2FA / Face ID activated or disabled) */}
+            {securityPopupMessage && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setSecurityPopupMessage(null)}>
+                    <div
+                        className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full text-center"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                            <Icons.ShieldCheck size={24} className="text-green-600" />
+                        </div>
+                        <p className="text-gray-900 font-medium">{securityPopupMessage}</p>
+                        <button
+                            type="button"
+                            onClick={() => setSecurityPopupMessage(null)}
+                            className="mt-5 w-full py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                        >
+                            {t('ok')}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* 2FA enrollment modal (Supabase real users) */}
+            {showEnrollMfa && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowEnrollMfa(false)}>
+                    <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">{t('enable2fa')}</h3>
+                        <p className="text-sm text-gray-600 mb-4">{t('mfaEnterCode')}</p>
+                        {mfaEnrollQrSvg && (
+                            <div className="flex justify-center mb-4 p-4 bg-gray-50 rounded-xl">
+                                <img
+                                    src={`data:image/svg+xml;utf8,${encodeURIComponent(mfaEnrollQrSvg)}`}
+                                    alt="QR code for authenticator app"
+                                    className="w-48 h-48"
+                                />
+                            </div>
+                        )}
+                        <div className="mb-4">
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('mfaCodeLabel')}</label>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
+                                value={mfaEnrollCode}
+                                onChange={e => { setMfaEnrollCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setMfaEnrollError(null); }}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 text-center text-lg tracking-widest font-mono"
+                                placeholder="000000"
+                                maxLength={6}
+                            />
+                        </div>
+                        {mfaEnrollError && <p className="text-sm text-red-600 mb-2">{mfaEnrollError}</p>}
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowEnrollMfa(false)}
+                                className="flex-1 py-3 rounded-xl border border-gray-200 font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleVerifyMfaEnrollment}
+                                disabled={mfaEnrollLoading}
+                                className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {mfaEnrollLoading ? '...' : t('verify')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             </div>
     );
