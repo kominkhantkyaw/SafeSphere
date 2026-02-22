@@ -156,7 +156,7 @@ Emails are sent from `SafeSphere <onboarding@resend.dev>` until you add and veri
 
 ## Pushing to the repository
 
-Push **only source and functional code**. No sensitive data, no Cursor agent or IDE-only files. See **`PUSH_GUIDELINES.md`** for the same rules in **English**, **German (DE)**, and **Myanmar (MY)**.
+Push **only source and functional code**. No sensitive data, no Cursor agent or IDE-only files.
 
 Before you push:
 

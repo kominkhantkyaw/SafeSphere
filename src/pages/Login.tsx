@@ -7,7 +7,7 @@ import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 import { FaceScanModal } from '../components/FaceScanModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ThemeSettings } from '../types';
-import { requestAccount, confirmAccount, getPendingRegistration, authenticate } from '../services/api';
+import { requestAccount, confirmAccount, getPendingRegistration, authenticate, resendConfirmationEmail } from '../services/api';
 import { completeMfaChallenge, getSupabaseSessionUser, isDemoUser } from '../services/auth';
 import { isWebAuthnAvailable, getWebAuthnAuthOptions, verifyWebAuthnAssertion } from '../services/webauthn';
 import { User } from '../types';
@@ -50,6 +50,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
 
     // Face ID: camera-based face scan (like QR Scanner)
     const [showFaceScan, setShowFaceScan] = useState(false);
+    // Show 6-digit code on screen when email could not be sent (so user can still activate)
+    const [showFallbackCode, setShowFallbackCode] = useState(false);
+    // Reason email failed (from Edge Function / Resend) so user can fix setup
+    const [emailSendError, setEmailSendError] = useState<string | null>(null);
 
     const handleLogin = async (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -214,6 +218,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
         if (res.success) {
             setPendingEmail(regEmail);
             setConfirmationCode('');
+            setShowFallbackCode(res.emailSent === false);
+            setEmailSendError(res.emailError ?? null);
             setView('check-email');
         } else {
             setRegisterError(res.message);
@@ -415,13 +421,45 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 <p className="text-xs text-gray-400 text-center">
                                     {t('didNotReceiveCode')}
                                 </p>
-                                {import.meta.env.DEV && (() => {
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        setRegisterError(null);
+                                        setShowFallbackCode(false);
+                                        setLoading(true);
+                                        const result = await resendConfirmationEmail(pendingEmail);
+                                        setLoading(false);
+                                        if (result.success) {
+                                            setRegisterError(null);
+                                            setEmailSendError(null);
+                                            alert(t('confirmationResent') || 'Confirmation code resent! Check your inbox and spam folder.');
+                                        } else {
+                                            setRegisterError(result.message || 'Could not resend. Please try again.');
+                                            setShowFallbackCode(true);
+                                        }
+                                    }}
+                                    disabled={loading}
+                                    className="w-full py-2 text-sm font-semibold text-blue-600 hover:text-blue-700 underline disabled:opacity-50"
+                                >
+                                    {t('resendCode') || 'Resend confirmation code'}
+                                </button>
+                                {emailSendError && (
+                                    <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2.5 text-center" role="alert">
+                                        {emailSendError}
+                                    </p>
+                                )}
+                                {(() => {
                                     const pending = getPendingRegistration(pendingEmail);
-                                    return pending?.token ? (
+                                    const showCode = pending?.token && (import.meta.env.DEV || showFallbackCode);
+                                    if (!showCode) return null;
+                                    return (
                                         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-center font-mono" role="status">
-                                            Development: Your code is <strong>{pending.token}</strong>
+                                            {showFallbackCode
+                                                ? (t('emailNotSentUseCode') || 'Email could not be sent. Use this code to activate:') + ' '
+                                                : 'Development: Your code is '}
+                                            <strong>{pending.token}</strong>
                                         </p>
-                                    ) : null;
+                                    );
                                 })()}
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('enter6DigitCode')}</label>
@@ -447,7 +485,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => { setView('register'); setRegisterError(null); setConfirmationCode(''); }}
+                                    onClick={() => { setView('register'); setRegisterError(null); setConfirmationCode(''); setShowFallbackCode(false); setEmailSendError(null); }}
                                     className="w-full py-2 text-sm text-gray-500 hover:text-gray-700"
                                 >
                                     {t('useDifferentEmail')}

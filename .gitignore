@@ -36,10 +36,14 @@ docs/
 *.rar
 *.7z
 
-# ── Markdown docs to exclude ─────────────────────
-workingprototype.md
-implementation.md
-DEPLOY_CHECKLIST.md
+# ── Markdown: only README.md at root ─────────────
+*.md
+!README.md
+
+# ── Text and data exports (no sensitive or docs) ─
+*.txt
+!public/robots.txt
+*.csv
 
 # ── Database dumps (schema README is committed) ──
 backend/supabase/safesphere_postgres.sql
@@ -82,3 +86,5 @@ Thumbs.db
 # ── Misc ──────────────────────────────────────────
 metadata.json
 *.local
+Final/
+Project/

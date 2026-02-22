@@ -3,9 +3,10 @@
 // Set secret: supabase secrets set RESEND_API_KEY=re_xxxxxxxxx
 // Resend: https://resend.com (free tier: 100 emails/day, use onboarding@resend.dev as sender)
 
-const corsHeaders = {
+const corsHeaders: Record<string, string> = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 interface Body {
@@ -45,6 +46,9 @@ Deno.serve(async (req) => {
             );
         }
 
+        // Use RESEND_FROM if set (e.g. "SafeSphere <noreply@safesphere.app>"), else default
+        const fromAddress = Deno.env.get('RESEND_FROM') || 'SafeSphere <onboarding@resend.dev>';
+
         const res = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -52,7 +56,7 @@ Deno.serve(async (req) => {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                from: 'SafeSphere <onboarding@resend.dev>',
+                from: fromAddress,
                 to: [email],
                 subject: 'Your SafeSphere confirmation code',
                 html: `

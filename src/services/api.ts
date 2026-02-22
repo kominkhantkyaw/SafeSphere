@@ -2,13 +2,42 @@
 import { MOCK_ALERTS, MOCK_CHECKLIST, MOCK_DRILLS, MOCK_INJURIES, MOCK_INVENTORY, MOCK_LEARN_ITEMS, MOCK_REPORTS, MOCK_RESOURCES, MOCK_TUTORIALS, MOCK_USER } from '../constants';
 import type { Alert, ChecklistItem, DrillSession, IncidentReport, InjuryCase, InventoryItem, LearnItem, Resource, Tutorial, User, EarthquakeEvent, SafetyAsset } from '../types';
 import { supabase, isSupabaseReady } from './supabase';
-import { isDemoUser, signInWithSupabase } from './auth';
+import { isDemoUser, signInWithSupabase, signUpWithSupabase, verifyEmailOtp, resendSignUpConfirmation } from './auth';
 
 const USE_MOCK_DATA = true; // Set to false to use PHP Backend
 const API_URL = 'https://safesphere.app/api/api.php';
 
 /** True when online and Supabase is configured - use Supabase for storage */
 const useSupabase = (): boolean => typeof navigator !== 'undefined' && navigator.onLine && isSupabaseReady();
+
+/**
+ * Call the send-confirmation-email Edge Function via Supabase client (handles URL + auth correctly).
+ * Returns { success, message } from the function, or network/error message on failure.
+ */
+async function callSendConfirmationEmail(email: string, code: string): Promise<{ success: boolean; message?: string }> {
+    if (!supabase || !isSupabaseReady()) {
+        return { success: false, message: 'Supabase is not configured.' };
+    }
+    try {
+        const { data, error } = await supabase.functions.invoke('send-confirmation-email', {
+            body: { email: email.trim(), code },
+        });
+        if (error) {
+            return { success: false, message: error.message || 'Network or CORS error. Deploy the function and set env vars.' };
+        }
+        const result = data as { success?: boolean; message?: string } | null;
+        if (result && result.success) {
+            return { success: true };
+        }
+        return {
+            success: false,
+            message: result?.message || (result === null ? 'No response from function.' : 'Failed to send email.'),
+        };
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        return { success: false, message: msg };
+    }
+}
 
 // Offline storage helper
 const getCached = <T>(key: string): T | null => {
@@ -196,7 +225,7 @@ export interface PendingRegistration {
 
 const PENDING_REG_KEY = 'safesphere_pending_registrations';
 
-/** Request a new account - stores pending registration and "sends" confirmation email. */
+/** Request a new account — creates user in Supabase Auth and sends 6-digit code email via Edge Function (Resend). */
 export const requestAccount = async (data: {
     firstName: string;
     lastName: string;
@@ -204,7 +233,7 @@ export const requestAccount = async (data: {
     email: string;
     phone: string;
     password: string;
-}): Promise<{ success: boolean; message: string }> => {
+}): Promise<{ success: boolean; message: string; emailSent?: boolean; emailError?: string }> => {
     const users = await fetchAllUsers();
     const emailNorm = data.email.trim().toLowerCase();
     if (users.some(u => u.email?.toLowerCase() === emailNorm)) {
@@ -222,6 +251,7 @@ export const requestAccount = async (data: {
         return { success: false, message: 'Please enter your phone number (with country code).' };
     }
 
+    // Generate a 6-digit code (used for local fallback + optional SMS)
     const token = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
     const pending: PendingRegistration = {
@@ -239,50 +269,140 @@ export const requestAccount = async (data: {
     const filtered = all.filter(p => p.email.toLowerCase() !== emailNorm);
     setCached(PENDING_REG_KEY, [...filtered, pending]);
 
-    // Send confirmation email via Supabase Edge Function (Resend)
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-    if (supabaseUrl && anonKey) {
-        try {
-            const res = await fetch(`${supabaseUrl}/functions/v1/send-confirmation-email`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${anonKey}`,
-                },
-                body: JSON.stringify({ email: data.email.trim(), code: token }),
-            });
-            const result = await res.json().catch(() => ({})) as { success?: boolean; message?: string };
-            if (!result.success && process.env.NODE_ENV === 'development') {
-                console.warn('[Demo] Confirmation email failed:', result.message || res.status);
+    // ── PRIMARY: Supabase Auth signUp (triggers built-in confirmation email) ──
+    // This is the main channel. Supabase sends the confirmation email automatically
+    // when "Confirm email" is enabled in Auth → Settings. No Edge Function needed.
+    let supabaseSignupOk = false;
+    if (isSupabaseReady()) {
+        const fullName = `${data.firstName.trim()} ${data.lastName.trim()}`.trim();
+        const signUpResult = await signUpWithSupabase(data.email.trim(), data.password, {
+            name: fullName,
+            role: 'Viewer',
+            phone: phoneTrim,
+        });
+        if (signUpResult.success) {
+            supabaseSignupOk = true;
+            if (import.meta.env.DEV) {
+                console.log('[Auth] Supabase user created. Email confirmation required:',
+                    signUpResult.needsEmailConfirmation);
             }
-        } catch (err) {
-            if (process.env.NODE_ENV === 'development') {
-                console.warn('[Demo] Could not send confirmation email:', err);
+        } else {
+            if (import.meta.env.DEV) {
+                console.warn('[Auth] Supabase signUp error:', signUpResult.message);
+            }
+            // If "User already registered" → they may need to resend confirmation
+            if (signUpResult.message?.includes('already registered') ||
+                signUpResult.message?.includes('already been registered')) {
+                // Try resending the confirmation email
+                await resendSignUpConfirmation(data.email.trim()).catch(() => {});
+                supabaseSignupOk = true; // user exists, email was resent
             }
         }
     }
-    if (process.env.NODE_ENV === 'development') {
-        console.log('[Demo] 6-digit code sent to email:', data.email, '; also log for testing:', token);
+
+    // ── Send 6-digit code email via Edge Function (Resend) ──
+    // Uses Supabase client so URL and auth are correct; requires function deployed + RESEND_API_KEY set.
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (isSupabaseReady()) {
+        const result = await callSendConfirmationEmail(data.email.trim(), token);
+        emailSent = result.success;
+        if (!result.success) {
+            emailError = result.message;
+            if (import.meta.env.DEV) {
+                console.info('[Auth] Confirmation email not sent:', emailError);
+            }
+        }
+    } else {
+        emailError = 'Supabase URL or anon key not set in env.';
+    }
+
+    if (import.meta.env.DEV) {
+        console.log('[Dev] 6-digit fallback code:', token, '| email:', data.email);
     }
 
     return {
         success: true,
-        message: `We've sent a 6-digit code to your email and phone. Enter it below to activate your account.`,
+        message: emailSent
+            ? `We've sent a confirmation code to ${data.email.trim()}. Check your inbox (and spam folder) for the 6-digit code, then enter it below.`
+            : supabaseSignupOk
+                ? `We've sent a 6-digit code to your email. Enter it below to activate your account.`
+                : `We've sent a 6-digit code to your email. Enter it below to activate your account.`,
+        emailSent,
+        emailError,
     };
 };
 
-/** Confirm account via email token - creates user and returns user for sign-in. */
+/**
+ * Resend the 6-digit confirmation code to the user's email via the Edge Function (Resend).
+ * Use this when the user didn't receive the first email. Requires send-confirmation-email
+ * to be deployed and RESEND_API_KEY to be set in Supabase.
+ */
+export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; message?: string }> => {
+    const pending = getPendingRegistration(email);
+    if (!pending) {
+        return { success: false, message: 'No pending registration found. Please request a new account first.' };
+    }
+    if (Date.now() > pending.expiresAt) {
+        return { success: false, message: 'Your code has expired. Please request a new account.' };
+    }
+    if (!isSupabaseReady()) {
+        return { success: false, message: 'Email service is not configured.' };
+    }
+    return callSendConfirmationEmail(email.trim(), pending.token);
+};
+
+/** Confirm account — verifies with Supabase Auth OTP first, then falls back to local token. */
 export const confirmAccount = async (email: string, token: string): Promise<{ success: boolean; message: string; user?: User }> => {
     const emailNorm = email.trim().toLowerCase();
     const all = getCached<PendingRegistration[]>(PENDING_REG_KEY) || [];
-    const pending = all.find(p => p.email.toLowerCase() === emailNorm && p.token === token);
+    const pending = all.find(p => p.email.toLowerCase() === emailNorm);
+
     if (!pending) {
-        return { success: false, message: 'Invalid or expired code. Please check the 6-digit code or request a new one.' };
+        return { success: false, message: 'No pending registration found. Please request a new account.' };
     }
     if (Date.now() > pending.expiresAt) {
         setCached(PENDING_REG_KEY, all.filter(p => p.email.toLowerCase() !== emailNorm));
         return { success: false, message: 'Your code has expired. Please request a new account.' };
+    }
+
+    // ── Try Supabase Auth OTP verification first (email type) ──
+    if (isSupabaseReady()) {
+        const otpResult = await verifyEmailOtp(email, token);
+        if (otpResult.success) {
+            // Supabase user confirmed — also create local user record for the app
+            const users = await fetchAllUsers();
+            const newUser: User = {
+                id: Math.max(...users.map(u => u.id), 0) + 1,
+                name: `${pending.firstName} ${pending.lastName}`.trim(),
+                role: 'Viewer',
+                safetyScore: 0,
+                xp: 0,
+                email: pending.email,
+                username: pending.username,
+                phone: pending.phone || undefined,
+                password: pending.password,
+                skills: [],
+                volunteerPoints: 0,
+                permissions: [],
+            };
+            setCached(USERS_CACHE_KEY, [...users, newUser]);
+            setCached(PENDING_REG_KEY, all.filter(p => p.email.toLowerCase() !== emailNorm));
+            return {
+                success: true,
+                message: 'Your account has been confirmed via Supabase. You can now sign in.',
+                user: newUser,
+            };
+        }
+        // If Supabase OTP failed, fall through to local token check
+        if (import.meta.env.DEV) {
+            console.warn('[Auth] Supabase OTP verification failed, trying local token:', otpResult.message);
+        }
+    }
+
+    // ── Fallback: local 6-digit token check ──
+    if (pending.token !== token) {
+        return { success: false, message: 'Invalid or expired code. Please check the 6-digit code or request a new one.' };
     }
 
     const users = await fetchAllUsers();

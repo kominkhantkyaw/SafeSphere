@@ -55,13 +55,19 @@ export type AuthResult =
     | { success: false; message: string };
 
 /**
- * Sign up a new real user with Supabase. Use for registration when Supabase is configured.
+ * Sign up a new real user with Supabase Auth.
+ * Creates the user in Supabase — email confirmation is controlled by the Supabase dashboard
+ * (Auth → Settings → "Confirm email"). When enabled, session will be null until confirmed.
+ * Phone number is stored in user_metadata for SMS OTP verification.
  */
 export async function signUpWithSupabase(
     email: string,
     password: string,
-    metadata?: { name?: string; role?: User['role'] }
-): Promise<{ success: true; user: User } | { success: false; message: string }> {
+    metadata?: { name?: string; role?: User['role']; phone?: string }
+): Promise<
+    | { success: true; user: User; needsEmailConfirmation: boolean }
+    | { success: false; message: string }
+> {
     if (!supabase || !isSupabaseReady()) {
         return { success: false, message: 'Supabase is not configured.' };
     }
@@ -72,12 +78,101 @@ export async function signUpWithSupabase(
             data: {
                 name: metadata?.name ?? email.trim().split('@')[0],
                 role: metadata?.role ?? 'Viewer',
+                phone: metadata?.phone ?? undefined,
             },
         },
     });
     if (error) return { success: false, message: error.message };
     if (!data.user) return { success: false, message: 'Sign up failed.' };
+
+    // If session is null the user must confirm their email first
+    const needsEmailConfirmation = data.session === null;
+    return { success: true, user: supabaseUserToAppUser(data.user), needsEmailConfirmation };
+}
+
+/**
+ * Verify the OTP code (6-digit) that Supabase sent during sign-up.
+ * Uses type 'signup' — this matches the confirmation email Supabase sends
+ * when signUp() is called with "Confirm email" enabled in the dashboard.
+ */
+export async function verifyEmailOtp(
+    email: string,
+    token: string
+): Promise<{ success: true; user: User } | { success: false; message: string }> {
+    if (!supabase || !isSupabaseReady()) {
+        return { success: false, message: 'Supabase is not configured.' };
+    }
+    // Try 'signup' type first — this is the correct type for sign-up confirmation
+    const { data, error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: token.trim(),
+        type: 'signup',
+    });
+    if (error) {
+        // Fallback: try 'email' type in case the OTP was sent via magiclink/email change
+        const { data: d2, error: e2 } = await supabase.auth.verifyOtp({
+            email: email.trim(),
+            token: token.trim(),
+            type: 'email',
+        });
+        if (e2) return { success: false, message: error.message };
+        if (!d2.user) return { success: false, message: 'Verification failed.' };
+        return { success: true, user: supabaseUserToAppUser(d2.user) };
+    }
+    if (!data.user) return { success: false, message: 'Verification failed.' };
     return { success: true, user: supabaseUserToAppUser(data.user) };
+}
+
+/**
+ * Resend the sign-up confirmation email for a user who hasn't confirmed yet.
+ */
+export async function resendSignUpConfirmation(
+    email: string
+): Promise<{ success: boolean; message?: string }> {
+    if (!supabase || !isSupabaseReady()) {
+        return { success: false, message: 'Supabase is not configured.' };
+    }
+    const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+    });
+    if (error) return { success: false, message: error.message };
+    return { success: true };
+}
+
+/**
+ * Send a phone OTP (SMS) for verification via a Supabase Edge Function.
+ * The Edge Function sends the SMS through Twilio / any SMS provider.
+ * This is optional — if the Edge Function is not deployed or Twilio is not configured,
+ * it fails gracefully and confirmation can still proceed via email.
+ */
+export async function sendPhoneOtp(
+    phone: string,
+    code: string
+): Promise<{ success: boolean; message?: string }> {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (!supabaseUrl || !anonKey) {
+        return { success: false, message: 'Supabase is not configured.' };
+    }
+    try {
+        const res = await fetch(`${supabaseUrl}/functions/v1/send-confirmation-sms`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${anonKey}`,
+            },
+            body: JSON.stringify({ phone: phone.trim(), code }),
+        });
+        const result = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string };
+        if (!result.success) {
+            return { success: false, message: result.message || 'Failed to send SMS.' };
+        }
+        return { success: true };
+    } catch (err) {
+        console.error('sendPhoneOtp error:', err);
+        return { success: false, message: 'Failed to send SMS.' };
+    }
 }
 
 /**
