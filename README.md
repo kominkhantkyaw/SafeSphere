@@ -70,7 +70,7 @@ SafeSphere is a Progressive Web Application (PWA) for disaster preparedness and 
 
 ## Prerequisites
 
-- **Node.js** v18.0.0 or higher (v20+ recommended) — [Download](https://nodejs.org/)
+- **Node.js** v20.0.0 or higher (required for build and clean `npm audit`; v18 may hit dev-dependency issues) — [Download](https://nodejs.org/)
 - **npm** v9.0.0 or higher (included with Node.js)
 - Modern browser (Chrome, Firefox, Safari, Edge)
 
@@ -350,7 +350,7 @@ Vite will try the next available port (3001, 3002, …). Check the terminal for 
 
 1. Remove `node_modules` and `package-lock.json`
 2. Run `npm install` again
-3. Ensure Node.js v18+: `node --version`
+3. Ensure Node.js v20+: `node --version`
 
 ### Supabase connection issues
 

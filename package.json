@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.0.4"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
