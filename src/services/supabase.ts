@@ -16,7 +16,14 @@ if (!url || !anonKey) {
 }
 
 export const supabase: SupabaseClient | null =
-  url && anonKey && isValidSupabaseUrl(url) ? createClient(url, anonKey) : null;
+  url && anonKey && isValidSupabaseUrl(url)
+    ? createClient(url, anonKey, {
+        auth: {
+          detectSessionInUrl: true,
+          flowType: 'pkce',
+        },
+      })
+    : null;
 
 /** True when Supabase is configured and can be used for online storage */
 export const isSupabaseReady = (): boolean => !!supabase;

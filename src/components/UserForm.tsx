@@ -16,7 +16,7 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
-    const [role, setRole] = useState<'Admin' | 'Responder' | 'Viewer' | 'Reporter'>('Viewer');
+    const [role, setRole] = useState<'Admin' | 'Responder' | 'Reporter'>('Reporter');
     
     // New Fields
     const [avatar, setAvatar] = useState<string | null>(null);
@@ -133,7 +133,6 @@ const UserForm: React.FC<UserFormProps> = ({ initialData, onCancel, onSuccess })
                             <option value="Admin">Admin</option>
                             <option value="Responder">Responder</option>
                             <option value="Reporter">Reporter</option>
-                            <option value="Viewer">Viewer</option>
                         </select>
                     </div>
                     <div>

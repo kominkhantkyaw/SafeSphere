@@ -3,7 +3,7 @@
 export interface User {
     id: number;
     name: string;
-    role: 'Admin' | 'Responder' | 'Viewer' | 'Reporter';
+    role: 'Admin' | 'Responder' | 'Reporter';
     safetyScore: number;
     xp: number;
     email?: string;

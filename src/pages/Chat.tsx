@@ -104,11 +104,10 @@ const Chat: React.FC = () => {
     const audioChunksRef = useRef<Blob[]>([]);
     const recordingStartRef = useRef<number>(0);
 
-    // Demo conversations - nameKey for translation. AI Safety Assistant is always available when responders are offline.
+    // Demo conversations - nameKey for translation. AI Safety Assistant is always available when responders are offline. (Admin Support removed.)
     const [conversations] = useState<Conversation[]>([
         { id: 1, name: 'Emergency Response Team', nameKey: 'emergencyResponseTeam', lastMessage: t('chatLastMsgReviewed'), timestamp: '2 min ago', unread: 2, online: true },
         { id: 2, name: 'Community Safety Group', nameKey: 'communitySafetyGroup', lastMessage: t('chatLastMsgDrill'), timestamp: '1 hour ago', unread: 0, online: true },
-        { id: 3, name: 'Admin Support', nameKey: 'adminSupport', lastMessage: t('chatLastMsgHelp'), timestamp: '3 hours ago', unread: 0, online: false },
         { id: 4, name: 'Local Responders', nameKey: 'localResponders', lastMessage: t('chatLastMsgCooperation'), timestamp: 'Yesterday', unread: 0, online: false },
         { id: 5, name: 'AI Safety Assistant', nameKey: 'aiSafetyAssistant', lastMessage: t('chatLastMsgAi247'), timestamp: 'Now', unread: 0, online: true, isAi: true }
     ]);
@@ -125,9 +124,6 @@ const Chat: React.FC = () => {
         2: [
             { id: 201, sender: t('communitySafetyGroup'), content: t('chatMsgWelcomeCommunity'), timestamp: '9:00 AM', isOwn: false },
             { id: 202, sender: t('communitySafetyGroup'), content: t('chatMsgDrillScheduled'), timestamp: '9:05 AM', isOwn: false }
-        ],
-        3: [
-            { id: 301, sender: t('adminSupport'), content: t('chatMsgAdminHelp'), timestamp: '11:00 AM', isOwn: false }
         ],
         4: [
             { id: 401, sender: t('localResponders'), content: t('chatMsgRespondersCooperation'), timestamp: 'Yesterday', isOwn: false }

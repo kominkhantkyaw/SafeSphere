@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Icons } from '../components/Icon';
 import Onboarding from '../components/Onboarding';
 import { useLanguage } from '../contexts/LanguageContext';
-import { ChecklistItem, DrillSession, LearnItem, Tutorial, User } from '../types';
-import { fetchChecklist, fetchDrills, fetchUser, fetchTutorials, fetchTutorialProgress, completeTutorial, submitChecklist, deleteChecklist, submitDrill, deleteDrill, submitTutorial, deleteTutorial, fetchLearnItems, submitLearnItem, deleteLearnItem } from '../services/api';
+import { useUser } from '../contexts/UserContext';
+import { ChecklistItem, DrillSession, LearnItem, Tutorial } from '../types';
+import { fetchChecklist, fetchDrills, fetchTutorials, fetchTutorialProgress, completeTutorial, submitChecklist, deleteChecklist, submitDrill, deleteDrill, submitTutorial, deleteTutorial, fetchLearnItems, submitLearnItem, deleteLearnItem } from '../services/api';
 
 const CHECKLIST_KEY_MAP: Record<number, string> = {
     1: 'checklistBuildKit', 2: 'checklistSaveNumbers', 3: 'checklistStoreWater', 4: 'checklistStockFood',
@@ -52,11 +53,11 @@ interface PrepareProps {
 
 const Prepare: React.FC<PrepareProps> = ({ onNavigate }) => {
     const { t } = useLanguage();
+    const { user } = useUser();
     const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
     const [drills, setDrills] = useState<DrillSession[]>([]);
     const [tutorials, setTutorials] = useState<Tutorial[]>([]);
     const [completedTutorialIds, setCompletedTutorialIds] = useState<number[]>([]);
-    const [user, setUser] = useState<User | null>(null);
     const [activeTab, setActiveTab] = useState<'learn' | 'checklist' | 'drills' | 'tutorials'>('learn');
     const [drillsSubTab, setDrillsSubTab] = useState<'upcoming' | 'logs'>('upcoming');
     const [displayedXp, setDisplayedXp] = useState(0);
@@ -93,6 +94,7 @@ const Prepare: React.FC<PrepareProps> = ({ onNavigate }) => {
     const [learnUrl, setLearnUrl] = useState('');
     const [learnType, setLearnType] = useState<'guide' | 'video' | 'resource'>('guide');
 
+    /** Only Admin can manage Prepare content (checklists, drills, tutorials, learn items). Reporter and Responder can view and complete only. */
     const isAdmin = user?.role === 'Admin';
     const BASE_XP = 400; // Base XP for registration and profile setup
 
@@ -105,7 +107,6 @@ const Prepare: React.FC<PrepareProps> = ({ onNavigate }) => {
         const d = await fetchDrills();
         const tut = await fetchTutorials();
         const completed = await fetchTutorialProgress();
-        const u = await fetchUser();
         const learn = await fetchLearnItems();
         
         setChecklist(c);
@@ -113,7 +114,6 @@ const Prepare: React.FC<PrepareProps> = ({ onNavigate }) => {
         setTutorials(tut);
         setLearnItems(learn);
         setCompletedTutorialIds(completed);
-        setUser(u);
         
         // Dynamic Calculation: Base XP + Checklist + Tutorial completions
         const checklistScore = c.reduce((acc, item) => item.completed ? acc + item.xp : acc, 0);

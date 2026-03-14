@@ -9,7 +9,7 @@ import type { User } from '../types';
 
 // Must match api.ts DEMO_CREDENTIALS emails (no import from api to avoid circular dependency)
 const DEMO_EMAILS = new Set([
-    'admin@safesphere.app', 'responder@safesphere.app', 'reporter@safesphere.app', 'viewer@safesphere.app'
+    'admin@safesphere.app', 'responder@safesphere.app', 'reporter@safesphere.app'
 ]);
 
 /** True if email is a demo account (mock auth only). */
@@ -21,7 +21,7 @@ export function isDemoUser(email: string): boolean {
 function supabaseUserToAppUser(sbUser: { id: string; email?: string; user_metadata?: Record<string, unknown> }): User {
     const meta = sbUser.user_metadata || {};
     const name = (meta.name as string) || sbUser.email?.split('@')[0] || 'User';
-    const role = (meta.role as User['role']) || 'Viewer';
+    const role = (meta.role as User['role']) || 'Reporter';
     const id = hashUuidToNumber(sbUser.id);
     return {
         id,
@@ -77,7 +77,7 @@ export async function signUpWithSupabase(
         options: {
             data: {
                 name: metadata?.name ?? email.trim().split('@')[0],
-                role: metadata?.role ?? 'Viewer',
+                role: metadata?.role ?? 'Reporter',
                 phone: metadata?.phone ?? undefined,
             },
         },
@@ -241,6 +241,38 @@ export async function getSupabaseSessionUser(): Promise<User | null> {
 /** Sign out from Supabase (call on app logout for real users). */
 export async function signOutSupabase(): Promise<void> {
     if (supabase) await supabase.auth.signOut();
+}
+
+export type OAuthResult = { success: true; redirectUrl: string } | { success: false; message: string };
+
+/** Sign in with Google (Gmail). Redirects to Google OAuth; on return, use getSupabaseSessionUser() and then onLogin(). */
+export async function signInWithGoogle(): Promise<OAuthResult> {
+    if (!supabase || !isSupabaseReady()) {
+        return { success: false, message: 'Supabase is not configured. Enable Google sign-in in your Supabase project.' };
+    }
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname || '/'}` : undefined;
+    const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo },
+    });
+    if (error) return { success: false, message: error.message };
+    if (data?.url) return { success: true, redirectUrl: data.url };
+    return { success: false, message: 'Could not get sign-in URL.' };
+}
+
+/** Sign in with Facebook. Redirects to Facebook OAuth; on return, use getSupabaseSessionUser() and then onLogin(). */
+export async function signInWithFacebook(): Promise<OAuthResult> {
+    if (!supabase || !isSupabaseReady()) {
+        return { success: false, message: 'Supabase is not configured. Enable Facebook sign-in in your Supabase project.' };
+    }
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname || '/'}` : undefined;
+    const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: { redirectTo },
+    });
+    if (error) return { success: false, message: error.message };
+    if (data?.url) return { success: true, redirectUrl: data.url };
+    return { success: false, message: 'Could not get sign-in URL.' };
 }
 
 /**

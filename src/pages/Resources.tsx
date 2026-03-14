@@ -1,7 +1,7 @@
-
 import React, { useEffect, useState } from 'react';
 import { Icons } from '../components/Icon';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useUser } from '../contexts/UserContext';
 import { Resource } from '../types';
 import { fetchResources, deleteResource } from '../services/api';
 import IncidentMap from '../components/IncidentMap';
@@ -9,6 +9,9 @@ import ResourceForm from '../components/ResourceForm';
 
 const Resources: React.FC = () => {
     const { t } = useLanguage();
+    const { user } = useUser();
+    /** Only Admin can add, edit, or delete resources. Reporter and Responder can view, print, share, get directions. */
+    const canManageResources = user?.role === 'Admin';
     const [resources, setResources] = useState<Resource[]>([]);
     const [filters, setFilters] = useState<string[]>(['all']); // Multi-filter
     const [urgencyFilter, setUrgencyFilter] = useState<string>('all'); // Urgency
@@ -186,9 +189,11 @@ const Resources: React.FC = () => {
         <div className="flex flex-col pb-24 p-4 sm:p-5 md:p-6 min-h-screen relative w-full min-w-0">
             <h1 className="text-2xl font-bold mb-4 flex justify-between items-center">
                 {t('resourceHub')}
-                <button onClick={handleAdd} className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shadow-lg">
-                    <Icons.Plus size={18} />
-                </button>
+                {canManageResources && (
+                    <button onClick={handleAdd} className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shadow-lg">
+                        <Icons.Plus size={18} />
+                    </button>
+                )}
             </h1>
 
             {/* Search & Sort */}
@@ -356,11 +361,15 @@ const Resources: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Action Bar */}
+                            {/* Action Bar: Edit/Delete only for Admin; all roles can print, QR, share */}
                             <div className="flex items-center gap-1 border-t border-gray-100 pt-3 mt-3">
-                                <button onClick={(e) => handleEdit(resource, e)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Icons.Edit size={16}/></button>
-                                <button onClick={(e) => handleDelete(resource.id, e)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Icons.Trash size={16}/></button>
-                                <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                                {canManageResources && (
+                                    <>
+                                        <button onClick={(e) => handleEdit(resource, e)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Icons.Edit size={16}/></button>
+                                        <button onClick={(e) => handleDelete(resource.id, e)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Icons.Trash size={16}/></button>
+                                        <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                                    </>
+                                )}
                                 <button onClick={(e) => handlePrint(resource, e)} className="p-2 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg"><Icons.Printer size={16}/></button>
                                 <button onClick={(e) => handleQR(resource, e)} className="p-2 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg"><Icons.QrCode size={16}/></button>
                                 <button onClick={(e) => handleShare(resource, e)} className="p-2 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg"><Icons.Share size={16}/></button>

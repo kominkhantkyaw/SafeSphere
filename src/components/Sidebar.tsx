@@ -129,7 +129,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="font-bold text-gray-900 truncate">{user?.name ?? 'User'}</div>
-                            <div className="text-sm text-gray-500">{user?.role ?? 'Viewer'}</div>
+                            <div className="text-sm text-gray-500">{user?.role ?? 'Reporter'}</div>
                         </div>
                     </button>
                 </div>

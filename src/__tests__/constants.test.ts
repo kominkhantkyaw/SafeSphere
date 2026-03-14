@@ -17,7 +17,7 @@ describe('Constants - Mock Data', () => {
     });
 
     it('should have valid role', () => {
-      const validRoles = ['Admin', 'Responder', 'Viewer', 'Reporter'];
+      const validRoles = ['Admin', 'Responder', 'Reporter'];
       expect(validRoles).toContain(MOCK_USER.role);
     });
   });

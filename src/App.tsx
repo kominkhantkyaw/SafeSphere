@@ -165,7 +165,7 @@ const AppContent: React.FC = () => {
         // Create a user object with demo data for existing users
         const demoUser: User = {
             id: 1,
-            name: role === 'Admin' ? 'Admin User' : role === 'Responder' ? 'Responder User' : 'Viewer User',
+            name: role === 'Admin' ? 'Admin User' : role === 'Responder' ? 'Responder User' : 'Reporter User',
             role: role as User['role'],
             safetyScore: 85,
             xp: 450,
@@ -233,7 +233,7 @@ const AppContent: React.FC = () => {
             case 'prepare': return <Prepare onNavigate={setActiveTab} />;
             case 'resources': return <Resources />;
             case 'maps': return <Maps />;
-            case 'admin': return <Admin />;
+            case 'admin': return (user?.role === 'Admin' || user?.role === 'Responder') ? <Admin /> : <Home onNavigate={setActiveTab} onOpenSystemStatus={() => setShowSystemStatus(true)} />;
             case 'profile': return <Profile onBack={() => setActiveTab('home')} />;
             case 'settings': return <Settings onBack={() => setActiveTab('home')} onNavigate={setActiveTab} theme={theme} onThemeUpdate={setTheme} onThemeSettingsClick={() => setShowThemeSettings(true)} />;
             case 'chat': return <Chat />;

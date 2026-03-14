@@ -8,11 +8,33 @@ CM3070 Final Project — BSc Computer Science, University of London
 
 This repository contains the **Final Project** submission. It evolves from the preliminary report with enhanced features including Live Command Map, USGS earthquake integration, AI Safety Assistant, German and Myanmar language support.
 
+
+
+**Verhalten im Brandfall**
+
+Im Brandfall bewahren Sie bitte Ruhe und handeln Sie besonnen.
+Lösen Sie sofort den Feuermelder aus und informieren Sie die Feuerwehr über den Notruf 112.
+Bringen Sie sich und andere Personen in Sicherheit, ohne sich selbst zu gefährden.
+
+Verlassen Sie das Gebäude umgehend über die gekennzeichneten Fluchtwege.
+Benutzen Sie keine Aufzüge.
+Schließen Sie Türen hinter sich, aber schließen Sie sie nicht ab.
+
+Begeben Sie sich zum ausgewiesenen Sammelplatz und bleiben Sie dort, bis weitere Anweisungen erfolgen.
+
+Unterstützen Sie hilfsbedürftige Personen, sofern dies ohne Eigengefährdung möglich ist.
+Versuchen Sie nur dann, einen Entstehungsbrand zu löschen, wenn Sie sich nicht selbst in Gefahr bringen.
+
+Befolgen Sie stets die Anweisungen der Einsatzkräfte und der betrieblichen Brandschutzhelfer.
+
 ---
 
 ## Overview
 
 SafeSphere is a Progressive Web Application (PWA) for disaster preparedness and emergency response, focused on Southeast Asia. It provides incident reporting, resource mapping, role-based access, and gamified preparedness features, with offline support and multi-language capabilities.
+
+**Run locally:** `npm install` → `npm run dev` → open http://localhost:3000 → log in with a test account (see Test accounts below)  
+**Run tests:** `npm run test` or `npm run test:run`
 
 ---
 
@@ -24,7 +46,7 @@ SafeSphere is a Progressive Web Application (PWA) for disaster preparedness and 
 - **Interactive Maps** — Live incident markers, resources, USGS earthquake data, and weather layers
 - **Live Command Map** — Tactical simulation with responders, shelters, and air nodes
 - **Safety Score System** — Gamified preparedness with checklists and XP tracking
-- **Role-Based Access Control** — Admin, Responder, Reporter, and Viewer roles
+- **Role-Based Access Control** — Admin, Responder, and Reporter 
 - **AI Safety Assistant** — Chat support via Google Gemini (optional)
 - **Offline Capability** — Dual-mode storage: Supabase when online, localStorage when offline
 - **Multilingual Support** — English, German, and Myanmar
@@ -48,23 +70,25 @@ SafeSphere is a Progressive Web Application (PWA) for disaster preparedness and 
 
 ## Prerequisites
 
-- **Node.js** v18.0.0 or higher — [Download](https://nodejs.org/)
+- **Node.js** v18.0.0 or higher (v20+ recommended) — [Download](https://nodejs.org/)
 - **npm** v9.0.0 or higher (included with Node.js)
 - Modern browser (Chrome, Firefox, Safari, Edge)
 
 ---
 
-## Quick Start
+## Run SafeSphere (local development)
 
-### 1. Install Dependencies
+### 1. Clone and install
 
 ```bash
+git clone https://github.com/kominkhantkyaw/SafeSphere
+cd SafeSphere
 npm install
 ```
 
-### 2. Environment Setup
+### 2. Environment (optional for first run)
 
-Copy the example environment file and add your values:
+The app runs **without** any env vars (uses mock data and localStorage). For online storage and AI Chat:
 
 ```bash
 cp .env.example .env.local
@@ -74,32 +98,79 @@ Edit `.env.local`:
 
 | Variable                   | Required        | Description                                                   |
 | -------------------------- | --------------- | ------------------------------------------------------------- |
-| `VITE_SUPABASE_URL`      | For online mode | Your Supabase project URL (e.g.`https://xxxxx.supabase.co`) |
+| `VITE_SUPABASE_URL`      | For online mode | Your Supabase project URL (e.g. `https://xxxxx.supabase.co`) |
 | `VITE_SUPABASE_ANON_KEY` | For online mode | Supabase anon public key                                      |
-| `VITE_GEMINI_API_KEY`    | For AI Chat     | [Get key](https://aistudio.google.com/apikey)                    |
+| `VITE_GEMINI_API_KEY`    | For AI Chat     | [Get key](https://aistudio.google.com/apikey)                 |
 
-The app runs without Supabase or Gemini (uses mock data and localStorage).
-
-### 3. Run Development Server
+### 3. Start the dev server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+In the terminal you’ll see something like:
+
+```
+  VITE v6.x.x  ready in xxx ms
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://192.168.x.x:3000/
+```
+
+Open **http://localhost:3000** in your browser. The app loads with mock data if Supabase is not configured.
 
 ---
 
-## Test Accounts
+## Test accounts (demo login)
 
-Demo credentials for evaluation:
+Use these to **run and test** the app with different roles. SafeSphere has **three roles only**: Admin, Responder, Reporter.
 
-| Role                | Email                    | Password     |
-| ------------------- | ------------------------ | ------------ |
-| **Admin**           | admin@safesphere.app     |  xxxxxxxx    |
-| **Responder**       | responder@safesphere.app |  xxxxxxxx    |
-| **Reporter**        | reporter@safesphere.app  |  xxxxxxxx    |
-| **Viewer**          | viewer@safesphere.app    |  xxxxxxxx    |
+| Role        | Email                     | Password  |
+| ----------- | ------------------------- | --------- |
+| **Admin**   | admin@safesphere.app      | ********  |
+| **Responder** | responder@safesphere.app | ********  |
+| **Reporter**  | reporter@safesphere.app  | ********  |
+
+**For test purpose only** (do not commit or share):
+
+- **Admin:** `20Admin#26!`
+- **Responder:** `20Responder#26!`
+- **Reporter:** `20Reporter#26!`
+
+**How to test:**
+
+1. Run the app (`npm run dev`) and open http://localhost:3000.
+2. On the login screen, use one of the emails above and the corresponding test password (e.g. **Reporter**: `reporter@safesphere.app` / test password as above).
+3. After login, try: **Report incident** (SOS/Emergency), **Maps**, **Prepare**, **Chat**, **Profile**, **Settings**.
+4. Log out (Menu → Sign out) and log in as **Admin** or **Responder** to test **Admin Panel** (incidents, users, resources, etc.).
+
+---
+
+## Testing (automated and manual)
+
+### Run the test suite
+
+```bash
+npm run test          # Watch mode: re-runs on file changes
+npm run test:run      # Single run (CI-friendly)
+npm run test:coverage # Coverage report
+```
+
+Tests use **Vitest** and **React Testing Library**. They cover constants, types, and core behaviour; run them to confirm the project builds and key logic works.
+
+### Manual testing (suggested flows)
+
+- **Reporter:** Log in as Reporter → submit an incident (SOS/Emergency) → check confirmation; open Prepare (checklists, tutorials); use Chat (team channels, AI if `VITE_GEMINI_API_KEY` is set).
+- **Responder / Admin:** Log in as Admin or Responder → open **Admin Panel** from the menu → Incidents: view list, open a report, **Approve** / **Request info** / **Resolve**; check that status updates.
+- **Offline and sync:** See **[Testing Sections 14 and 15](docs/testing-sections-14-15.md)** for step-by-step verification of offline incident submission, queue, sync, and report validation (including DevTools and Supabase checks).
+
+### Preview production build locally
+
+```bash
+npm run build
+npm run preview
+```
+
+Then open the URL shown (e.g. http://localhost:4173) to test the production build.
 
 ---
 
@@ -138,8 +209,7 @@ When users **Request Account**, the app sends a 6-digit code to their email so t
    - From `.env.local`, your `VITE_SUPABASE_URL` is like `https://YOUR_PROJECT_REF.supabase.co` — the project ref is the part before `.supabase.co`.
    - Run: `supabase link --project-ref YOUR_PROJECT_REF`
 3. **Deploy the function**: `npm run deploy:confirmation-email` (or `supabase functions deploy send-confirmation-email`).
-4. **Create a Resend API key** at [resend.com](https://resend.com) (free tier: 100 emails/day), then set the secret:  
-   `supabase secrets set RESEND_API_KEY=re_xxxxxxxxx`
+4. **Create a Resend API key** at [resend.com](https://resend.com) (free tier: 100 emails/day), then set the secret:`supabase secrets set RESEND_API_KEY=re_xxxxxxxxx`
 5. Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set in `.env.local` so the app can call the function.
 
 Emails are sent from `SafeSphere <onboarding@resend.dev>` until you add and verify your own domain in Resend.
@@ -152,40 +222,63 @@ Emails are sent from `SafeSphere <onboarding@resend.dev>` until you add and veri
 4. **Development fallback** — When running locally (`npm run dev`), the activation screen shows a yellow box with your 6-digit code so you can complete signup without email. Use that code to activate your account while testing.
 5. **Resend limits** — Free tier allows 100 emails/day; ensure your Resend account is verified and the “to” address is valid.
 
+### Password reset email (Supabase Auth)
+
+**Forgot password** uses Supabase Auth's built-in reset flow: the app requests a reset link and Supabase sends the email. By default Supabase only sends auth emails to **addresses added as project team members** and has a low rate limit (~2/hour). To deliver reset emails to Gmail, iCloud, etc., configure **Custom SMTP** in Supabase (e.g. Resend, which you may already use for confirmation emails):
+
+1. In **Supabase Dashboard** go to **Authentication → SMTP** ([Auth → SMTP](https://supabase.com/dashboard/project/_/auth/smtp)).
+2. **Enable Custom SMTP** and enter your provider's settings. For **Resend**:
+   - **Host:** `smtp.resend.com`
+   - **Port:** `465` (or `587`)
+   - **Username:** `resend`
+   - **Password:** your Resend API key (`re_xxxxxxxxx`)
+   - **Sender email:** e.g. `no-reply@yourdomain.com` (or Resend's default until you verify a domain)
+   - **Sender name:** e.g. `SafeSphere`
+3. Save. Auth emails (password reset, magic link, confirmations sent by Supabase) will then go through Resend to any recipient.
+4. In **Authentication → URL Configuration**, set **Site URL** to your app (e.g. `https://www.safesphere.app`) and add the same URL (and `https://safesphere.app` if you use it) under **Redirect URLs**.
+
+If you don't set Custom SMTP, only team-member emails receive the reset link; others will not get an email.
+
 ---
-
-## Pushing to the repository
-
-Push **only source and functional code**. No sensitive data, no Cursor agent or IDE-only files.
-
-Before you push:
-
-- **Do not commit** `.env`, `.env.local`, or any file containing API keys (Supabase, Gemini, Resend, etc.)
-- **Do not commit** documents such as `.docx`, `.pdf`, or other confidential reports
-- **Do not commit** `.cursor/`, `cursor-agent/`, or other Cursor/IDE-only files — the repo should not contain these
-- The repo `.gitignore` already excludes: `.env*` (except `.env.example`), `*.pdf`, `*.docx`, `secrets/`, `.cursor/`, and similar
-
-Use `.env.example` (without real keys) as a template for other developers.
 
 ### Deploy to Vercel
 
-1. Push your branch; ensure no `.env` or API keys are committed (see above).
+1. Push your branch; ensure no `.env` or API keys are committed (see below).
 2. In the Vercel project: **Settings → Environment Variables**. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `VITE_GEMINI_API_KEY` (values from your own `.env.local`, not from the repo).
 3. Deploy; build uses `npm run build` and output directory `dist` (see `vercel.json`).
 
 ---
 
+## Pushing to the repository
+
+**Repo:** [https://github.com/kominkhantkyaw/SafeSphere](https://github.com/kominkhantkyaw/SafeSphere)
+
+Push **only source and functional code**. No sensitive data, no Cursor agent or IDE-only files. The project is set up so you can push **without** committing `.md` files (except this `README.md`).
+
+Before you push:
+
+- **Do not commit** `.env`, `.env.local`, or any file containing API keys (Supabase, Gemini, Resend, etc.)
+- **Do not commit** documents such as `.docx`, `.pdf`, or other confidential reports
+- **Do not commit** `.md` files other than `README.md` — the `.gitignore` excludes `*.md` and keeps only `README.md`, so pushes do not include other markdown files
+- **Do not commit** `.cursor/`, `cursor-agent/`, or other Cursor/IDE-only files
+
+The `.gitignore` already excludes: `.env*` (except `.env.example`), `*.pdf`, `*.docx`, `*.md` (except `README.md`), `docs/`, `secrets/`, `.cursor/`, and similar.
+
+Use `.env.example` (without real keys) as a template for other developers.
+
+---
+
 ## Scripts
 
-| Command                   | Description                         |
-| ------------------------- | ----------------------------------- |
-| `npm run dev`           | Start development server            |
-| `npm run build`         | Production build (output:`dist/`) |
-| `npm run preview`       | Preview production build locally    |
-| `npm run test`          | Run tests (Vitest)                  |
-| `npm run test:run`      | Run tests once                      |
-| `npm run test:coverage` | Run tests with coverage             |
-| `npm run analyze`       | Build and open bundle analyzer      |
+| Command                   | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `npm run dev`             | **Run** development server (then open http://localhost:3000) |
+| `npm run build`           | Production build (output: `dist/`)               |
+| `npm run preview`         | **Test** production build locally (e.g. http://localhost:4173) |
+| `npm run test`            | **Run** tests in watch mode (Vitest)             |
+| `npm run test:run`        | **Run** tests once (CI-friendly)                 |
+| `npm run test:coverage`   | Run tests with coverage report                   |
+| `npm run analyze`         | Build and open bundle analyzer                   |
 
 ---
 
@@ -270,6 +363,9 @@ The Gemini API key is valid but the free-tier quota is exceeded. Wait a few minu
 | **Database schema**      | `backend/supabase/safesphere_postgres.sql` |
 | **ER diagrams**          | `ER_Diagrams.md`                           |
 | **Supabase setup**       | `backend/supabase/README.md`               |
+| **User flow diagrams**   | `docs/user-flow-diagram.md`                |
+| **Testing Sections 14 & 15** (offline/sync, validation) | `docs/testing-sections-14-15.md` |
+| **Storage configuration** (online/offline) | `docs/storage-configuration.md` |
 | **Documentation**        | `documentation.html`                       |
 | **User feedback survey** | `docs/Final_User_Feedback_Survey.md`       |
 | **Preliminary report**   | `docs/Preliminary_Report final.docx`       |

@@ -3,11 +3,7 @@
 // Set secret: supabase secrets set RESEND_API_KEY=re_xxxxxxxxx
 // Resend: https://resend.com (free tier: 100 emails/day, use onboarding@resend.dev as sender)
 
-const corsHeaders: Record<string, string> = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { corsHeaders } from 'https://esm.sh/@supabase/supabase-js@2/cors';
 
 interface Body {
     email?: string;
@@ -16,7 +12,7 @@ interface Body {
 
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+        return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {

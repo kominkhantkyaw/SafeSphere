@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Icons } from './Icon';
 import { requestPasswordReset, resetPasswordWithCode } from '../services/api';
+import { COUNTRY_CODES } from '../constants';
 
-type Step = 'method' | 'request' | 'verify' | 'success';
+type Step = 'method' | 'request' | 'verify' | 'link_sent' | 'success';
 
 interface ForgotPasswordModalProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     const [step, setStep] = useState<Step>('method');
     const [method, setMethod] = useState<'email' | 'sms'>('email');
     const [email, setEmail] = useState('');
+    const [phoneCountryCode, setPhoneCountryCode] = useState('+43');
     const [phone, setPhone] = useState('');
     const [code, setCode] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -31,6 +33,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
         setStep('method');
         setMethod('email');
         setEmail('');
+        setPhoneCountryCode('+43');
         setPhone('');
         setCode('');
         setNewPassword('');
@@ -46,8 +49,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     const handleRequestCode = async (e: React.FormEvent) => {
         e.preventDefault();
         setMessage(null);
-        const value = method === 'email' ? email : phone;
-        if (!value.trim()) {
+        const value = method === 'email' ? email.trim() : `${phoneCountryCode} ${phone.trim()}`.trim();
+        if (method === 'email' ? !email.trim() : !phone.trim()) {
             setMessage({ type: 'error', text: method === 'email' ? 'Please enter your email.' : 'Please enter your phone number.' });
             return;
         }
@@ -56,7 +59,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
             const result = await requestPasswordReset(method, value);
             if (result.success) {
                 setMessage({ type: 'success', text: result.message });
-                setStep('verify');
+                setStep(result.linkSent ? 'link_sent' : 'verify');
             } else {
                 setMessage({ type: 'error', text: result.message });
             }
@@ -162,16 +165,30 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                             ) : (
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Phone Number</label>
-                                    <div className="relative">
-                                        <Icons.Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input
-                                            type="tel"
-                                            value={phone}
-                                            onChange={(e) => setPhone(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
-                                            placeholder="+1 234 567 8900"
-                                            autoFocus
-                                        />
+                                    <div className="flex gap-0 rounded-xl border border-gray-200 bg-white overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500/20 transition-colors">
+                                        <select
+                                            value={phoneCountryCode}
+                                            onChange={(e) => setPhoneCountryCode(e.target.value)}
+                                            className="shrink-0 pl-2 pr-1 py-3 bg-gray-50 border-r border-gray-200 text-gray-700 font-medium outline-none cursor-pointer appearance-none text-sm"
+                                            title="Country code"
+                                            aria-label="Country code"
+                                        >
+                                            {COUNTRY_CODES.map(({ code, label }) => (
+                                                <option key={code} value={code}>{label}</option>
+                                            ))}
+                                        </select>
+                                        <div className="relative flex-1 flex items-center">
+                                            <Icons.Phone className="absolute left-3 text-gray-400" size={18} />
+                                            <input
+                                                type="tel"
+                                                value={phone}
+                                                onChange={(e) => setPhone(e.target.value)}
+                                                className="w-full pl-10 pr-4 py-3 outline-none"
+                                                placeholder="123 456 7890"
+                                                autoFocus
+                                                autoComplete="tel-national"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -189,6 +206,27 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                                 {loading ? 'Sending...' : 'Send Verification Code'}
                             </button>
                         </form>
+                    )}
+
+                    {step === 'link_sent' && (
+                        <div className="space-y-4">
+                            <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto">
+                                <Icons.Mail size={28} className="text-blue-600" />
+                            </div>
+                            <p className="text-center text-gray-700">{message?.text}</p>
+                            <p className="text-sm text-center text-gray-500">Close this window and use the link in your email to set a new password.</p>
+                            <p className="text-xs text-center text-gray-400">
+                                If you don&apos;t see the email in a few minutes, check your spam folder. The link is sent by your account provider; if it still doesn&apos;t arrive, your administrator may need to enable custom email (SMTP) in the project settings.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90"
+                                style={{ backgroundColor: primaryColor }}
+                            >
+                                Close
+                            </button>
+                        </div>
                     )}
 
                     {step === 'verify' && (

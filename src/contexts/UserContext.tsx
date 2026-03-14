@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User } from '../types';
 import { encryptData, decryptData, sanitiseUserForStorage } from '../services/crypto';
-import { signOutSupabase } from '../services/auth';
+import { signOutSupabase, getSupabaseSessionUser } from '../services/auth';
+import { isSupabaseReady } from '../services/supabase';
 
 const STORAGE_KEY = 'safesphere_user_enc';
 
@@ -49,6 +50,18 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
             setLoaded(true);
         })();
     }, []);
+
+    // After load: if no user in storage but Supabase has a session (e.g. OAuth return), log that user in
+    useEffect(() => {
+        if (!loaded || user) return;
+        if (!isSupabaseReady()) return;
+        getSupabaseSessionUser().then((supabaseUser) => {
+            if (supabaseUser) {
+                const { password: _, ...safe } = supabaseUser as User & { password?: string };
+                setUser(safe as User);
+            }
+        });
+    }, [loaded, user]);
 
     const persistUser = useCallback(async (u: User | null) => {
         if (u) {

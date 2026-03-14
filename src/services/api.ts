@@ -10,35 +10,6 @@ const API_URL = 'https://safesphere.app/api/api.php';
 /** True when online and Supabase is configured - use Supabase for storage */
 const useSupabase = (): boolean => typeof navigator !== 'undefined' && navigator.onLine && isSupabaseReady();
 
-/**
- * Call the send-confirmation-email Edge Function via Supabase client (handles URL + auth correctly).
- * Returns { success, message } from the function, or network/error message on failure.
- */
-async function callSendConfirmationEmail(email: string, code: string): Promise<{ success: boolean; message?: string }> {
-    if (!supabase || !isSupabaseReady()) {
-        return { success: false, message: 'Supabase is not configured.' };
-    }
-    try {
-        const { data, error } = await supabase.functions.invoke('send-confirmation-email', {
-            body: { email: email.trim(), code },
-        });
-        if (error) {
-            return { success: false, message: error.message || 'Network or CORS error. Deploy the function and set env vars.' };
-        }
-        const result = data as { success?: boolean; message?: string } | null;
-        if (result && result.success) {
-            return { success: true };
-        }
-        return {
-            success: false,
-            message: result?.message || (result === null ? 'No response from function.' : 'Failed to send email.'),
-        };
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Network error';
-        return { success: false, message: msg };
-    }
-}
-
 // Offline storage helper
 const getCached = <T>(key: string): T | null => {
     try {
@@ -74,12 +45,11 @@ export const fetchUser = async (): Promise<User> => {
 const USERS_CACHE_KEY = 'safesphere_users_list_v3';
 const RESOURCES_CACHE_KEY = 'safesphere_resources_v3_peoples_park'; // Bumped: Community Relief/Center at People's Park
 
-/** Demo login credentials for role-based access */
+/** Demo login credentials — three roles only: Admin, Responder, Reporter. Passwords for test use only (see README). */
 export const DEMO_CREDENTIALS: Array<{ email: string; password: string; user: User }> = [
-    { email: 'admin@safesphere.app', password: 'admin123', user: { id: 1, name: 'Admin', role: 'Admin', safetyScore: 85, xp: 450, email: 'admin@safesphere.app', phone: '+1 555 0123', skills: ['Leadership', 'First Aid'], bloodType: 'O+', volunteerPoints: 120, permissions: ['approve_reports', 'manage_users', 'edit_resources'] } },
-    { email: 'responder@safesphere.app', password: 'responder123', user: { id: 2, name: 'Responder', role: 'Responder', safetyScore: 90, xp: 1200, email: 'responder@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, permissions: ['approve_reports'] } },
-    { email: 'reporter@safesphere.app', password: 'Reporter123!', user: { id: 3, name: 'Reporter', role: 'Reporter', safetyScore: 75, xp: 300, email: 'reporter@safesphere.app', skills: ['Driving'], bloodType: 'B+', volunteerPoints: 85, permissions: [] } },
-    { email: 'viewer@safesphere.app', password: 'viewer123', user: { id: 4, name: 'Viewer', role: 'Viewer', safetyScore: 50, xp: 100, email: 'viewer@safesphere.app', bloodType: 'A+', volunteerPoints: 20, permissions: [] } }
+    { email: 'admin@safesphere.app', password: '20Admin#26!', user: { id: 1, name: 'Admin', role: 'Admin', safetyScore: 85, xp: 450, email: 'admin@safesphere.app', phone: '+1 555 0123', skills: ['Leadership', 'First Aid'], bloodType: 'O+', volunteerPoints: 120, permissions: ['approve_reports', 'manage_users', 'edit_resources'] } },
+    { email: 'responder@safesphere.app', password: '20Responder#26!', user: { id: 2, name: 'Responder', role: 'Responder', safetyScore: 90, xp: 1200, email: 'responder@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, permissions: ['approve_reports'] } },
+    { email: 'reporter@safesphere.app', password: '20Reporter#26!', user: { id: 3, name: 'Reporter', role: 'Reporter', safetyScore: 75, xp: 300, email: 'reporter@safesphere.app', skills: ['Driving'], bloodType: 'B+', volunteerPoints: 85, permissions: [] } },
 ];
 
 /** Authenticate by email and password. Demo users: mock auth. Real users: Supabase Auth (may return requiresMfa). */
@@ -111,7 +81,7 @@ export const fetchAllUsers = async (): Promise<User[]> => {
     const mockUsers: User[] = [
         ...DEMO_CREDENTIALS.map(c => ({ ...c.user, password: c.password })),
         { id: 5, name: 'Sarah Connor', role: 'Responder', safetyScore: 90, xp: 1200, email: 'sarah@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, password: 'Sarah123!', permissions: ['approve_reports'] },
-        { id: 6, name: 'Christina', role: 'Viewer', safetyScore: 60, xp: 150, email: 'christina@safesphere.app', phone: '555-0102', bloodType: 'AB+', volunteerPoints: 45, password: 'Christina123!', permissions: [] }
+        { id: 6, name: 'Christina', role: 'Reporter', safetyScore: 60, xp: 150, email: 'christina@safesphere.app', phone: '555-0102', bloodType: 'AB+', volunteerPoints: 45, password: 'Christina123!', permissions: [] }
     ];
     setCached(USERS_CACHE_KEY, mockUsers);
     return Promise.resolve(mockUsers);
@@ -126,7 +96,7 @@ export const saveUser = async (user: Partial<User>): Promise<boolean> => {
         const newUser: User = {
             id: Date.now(),
             name: user.name || 'New User',
-            role: user.role || 'Viewer',
+            role: user.role || 'Reporter',
             safetyScore: 0,
             xp: 0,
             email: user.email,
@@ -225,7 +195,7 @@ export interface PendingRegistration {
 
 const PENDING_REG_KEY = 'safesphere_pending_registrations';
 
-/** Request a new account — creates user in Supabase Auth and sends 6-digit code email via Edge Function (Resend). */
+/** Request a new account — creates user in Supabase Auth (email confirmation) + optional SMS. */
 export const requestAccount = async (data: {
     firstName: string;
     lastName: string;
@@ -233,7 +203,7 @@ export const requestAccount = async (data: {
     email: string;
     phone: string;
     password: string;
-}): Promise<{ success: boolean; message: string; emailSent?: boolean; emailError?: string }> => {
+}): Promise<{ success: boolean; message: string }> => {
     const users = await fetchAllUsers();
     const emailNorm = data.email.trim().toLowerCase();
     if (users.some(u => u.email?.toLowerCase() === emailNorm)) {
@@ -277,7 +247,7 @@ export const requestAccount = async (data: {
         const fullName = `${data.firstName.trim()} ${data.lastName.trim()}`.trim();
         const signUpResult = await signUpWithSupabase(data.email.trim(), data.password, {
             name: fullName,
-            role: 'Viewer',
+            role: 'Reporter',
             phone: phoneTrim,
         });
         if (signUpResult.success) {
@@ -300,21 +270,30 @@ export const requestAccount = async (data: {
         }
     }
 
-    // ── Send 6-digit code email via Edge Function (Resend) ──
-    // Uses Supabase client so URL and auth are correct; requires function deployed + RESEND_API_KEY set.
-    let emailSent = false;
-    let emailError: string | undefined;
-    if (isSupabaseReady()) {
-        const result = await callSendConfirmationEmail(data.email.trim(), token);
-        emailSent = result.success;
-        if (!result.success) {
-            emailError = result.message;
-            if (import.meta.env.DEV) {
-                console.info('[Auth] Confirmation email not sent:', emailError);
+    // ── OPTIONAL: Branded email via Edge Function (Resend) ──
+    // Only works if send-confirmation-email is deployed and RESEND_API_KEY is set.
+    // Fails silently if not configured — Supabase's built-in email is the primary channel.
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (supabaseUrl && anonKey) {
+        // Email (optional branded email via Resend)
+        try {
+            const res = await fetch(`${supabaseUrl}/functions/v1/send-confirmation-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${anonKey}`,
+                },
+                body: JSON.stringify({ email: data.email.trim(), code: token }),
+            });
+            const result = await res.json().catch(() => ({})) as { success?: boolean; message?: string };
+            if (import.meta.env.DEV && !result.success) {
+                console.info('[Optional] Branded email via Resend skipped:', result.message || res.status);
             }
+        } catch {
+            // Edge Function not deployed — that's fine, Supabase sends its own email
         }
-    } else {
-        emailError = 'Supabase URL or anon key not set in env.';
+
     }
 
     if (import.meta.env.DEV) {
@@ -323,33 +302,10 @@ export const requestAccount = async (data: {
 
     return {
         success: true,
-        message: emailSent
+        message: supabaseSignupOk
             ? `We've sent a confirmation code to ${data.email.trim()}. Check your inbox (and spam folder) for the 6-digit code, then enter it below.`
-            : supabaseSignupOk
-                ? `We've sent a 6-digit code to your email. Enter it below to activate your account.`
-                : `We've sent a 6-digit code to your email. Enter it below to activate your account.`,
-        emailSent,
-        emailError,
+            : `We've sent a 6-digit code to your email. Enter it below to activate your account.`,
     };
-};
-
-/**
- * Resend the 6-digit confirmation code to the user's email via the Edge Function (Resend).
- * Use this when the user didn't receive the first email. Requires send-confirmation-email
- * to be deployed and RESEND_API_KEY to be set in Supabase.
- */
-export const resendConfirmationEmail = async (email: string): Promise<{ success: boolean; message?: string }> => {
-    const pending = getPendingRegistration(email);
-    if (!pending) {
-        return { success: false, message: 'No pending registration found. Please request a new account first.' };
-    }
-    if (Date.now() > pending.expiresAt) {
-        return { success: false, message: 'Your code has expired. Please request a new account.' };
-    }
-    if (!isSupabaseReady()) {
-        return { success: false, message: 'Email service is not configured.' };
-    }
-    return callSendConfirmationEmail(email.trim(), pending.token);
 };
 
 /** Confirm account — verifies with Supabase Auth OTP first, then falls back to local token. */
@@ -375,7 +331,7 @@ export const confirmAccount = async (email: string, token: string): Promise<{ su
             const newUser: User = {
                 id: Math.max(...users.map(u => u.id), 0) + 1,
                 name: `${pending.firstName} ${pending.lastName}`.trim(),
-                role: 'Viewer',
+                role: 'Reporter',
                 safetyScore: 0,
                 xp: 0,
                 email: pending.email,
@@ -409,7 +365,7 @@ export const confirmAccount = async (email: string, token: string): Promise<{ su
     const newUser: User = {
         id: Math.max(...users.map(u => u.id), 0) + 1,
         name: `${pending.firstName} ${pending.lastName}`.trim(),
-        role: 'Viewer',
+        role: 'Reporter',
         safetyScore: 0,
         xp: 0,
         email: pending.email,
