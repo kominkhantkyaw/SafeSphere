@@ -319,11 +319,19 @@ const Emergency: React.FC = () => {
 
             {/* --- ALERT DETAIL MODAL --- */}
             {selectedAlert && (
-                <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl relative">
-                        <button 
-                            onClick={() => setSelectedAlert(null)} 
-                            className="absolute top-4 right-4 p-2 bg-gray-100 rounded-full hover:bg-gray-200"
+                <div
+                    className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in"
+                    onClick={() => setSelectedAlert(null)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={t('activeAlerts')}
+                >
+                    <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setSelectedAlert(null); }}
+                            className="absolute top-4 right-4 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center bg-gray-100 rounded-full hover:bg-gray-200"
+                            aria-label={t('close') || 'Close'}
                         >
                             <Icons.X size={20} />
                         </button>
@@ -368,11 +376,17 @@ const Emergency: React.FC = () => {
 
             {/* --- MY REPORT DETAIL MODAL --- */}
             {selectedReport && (
-                <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full h-[80vh] sm:h-auto sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col relative animate-in slide-in-from-bottom-10">
+                <div
+                    className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm animate-in fade-in"
+                    onClick={() => setSelectedReport(null)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={t('reportDetails')}
+                >
+                    <div className="bg-white w-full h-[80vh] sm:h-auto sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col relative animate-in slide-in-from-bottom-10" onClick={(e) => e.stopPropagation()}>
                          <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
                             <h3 className="font-bold">{t('reportDetails')} #{selectedReport.id}</h3>
-                            <button onClick={() => setSelectedReport(null)} className="p-2 hover:bg-gray-200 rounded-full">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedReport(null); }} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gray-200 rounded-full" aria-label={t('close') || 'Close'}>
                                 <Icons.X size={20} />
                             </button>
                         </div>

@@ -243,36 +243,61 @@ export async function signOutSupabase(): Promise<void> {
     if (supabase) await supabase.auth.signOut();
 }
 
-export type OAuthResult = { success: true; redirectUrl: string } | { success: false; message: string };
+export type OAuthResult =
+    | { success: true; redirectUrl: string }
+    | { success: false; message: string; messageKey?: string };
+
+/** Build redirect URL for OAuth return. Must be whitelisted in Supabase Dashboard → Auth → URL Configuration → Redirect URLs. */
+function getOAuthRedirectUrl(): string | undefined {
+    if (typeof window === 'undefined') return undefined;
+    const origin = window.location.origin;
+    const path = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
+    return `${origin}${path}`;
+}
+
+function toFriendlyOAuthError(provider: 'Google' | 'Facebook', error: { message?: string; error_description?: string } | null): { message: string; messageKey: string } {
+    if (!error?.message) return { message: `Sign-in with ${provider} failed.`, messageKey: 'oauthSignInFailed' };
+    const msg = (error.message || error.error_description || '').toLowerCase();
+    if (msg.includes('provider') && (msg.includes('could not be found') || msg.includes('not found') || msg.includes('unsupported'))) {
+        return { message: `${provider} sign-in is not set up. In Supabase Dashboard go to Authentication → Providers, enable "${provider}", and add Client ID and Secret.`, messageKey: provider === 'Google' ? 'googleSignInNotSetup' : 'facebookSignInNotSetup' };
+    }
+    return { message: error.message, messageKey: 'oauthSignInFailed' };
+}
 
 /** Sign in with Google (Gmail). Redirects to Google OAuth; on return, use getSupabaseSessionUser() and then onLogin(). */
 export async function signInWithGoogle(): Promise<OAuthResult> {
     if (!supabase || !isSupabaseReady()) {
-        return { success: false, message: 'Supabase is not configured. Enable Google sign-in in your Supabase project.' };
+        return { success: false, message: 'Supabase is not configured. Enable Google sign-in in your Supabase project.', messageKey: 'supabaseNotConfigured' };
     }
-    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname || '/'}` : undefined;
+    const redirectTo = getOAuthRedirectUrl();
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo },
     });
-    if (error) return { success: false, message: error.message };
+    if (error) {
+        const { message, messageKey } = toFriendlyOAuthError('Google', error);
+        return { success: false, message, messageKey };
+    }
     if (data?.url) return { success: true, redirectUrl: data.url };
-    return { success: false, message: 'Could not get sign-in URL.' };
+    return { success: false, message: 'Could not get sign-in URL.', messageKey: 'couldNotGetSignInUrl' };
 }
 
 /** Sign in with Facebook. Redirects to Facebook OAuth; on return, use getSupabaseSessionUser() and then onLogin(). */
 export async function signInWithFacebook(): Promise<OAuthResult> {
     if (!supabase || !isSupabaseReady()) {
-        return { success: false, message: 'Supabase is not configured. Enable Facebook sign-in in your Supabase project.' };
+        return { success: false, message: 'Supabase is not configured. Enable Facebook sign-in in your Supabase project.', messageKey: 'supabaseNotConfigured' };
     }
-    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname || '/'}` : undefined;
+    const redirectTo = getOAuthRedirectUrl();
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
         options: { redirectTo },
     });
-    if (error) return { success: false, message: error.message };
+    if (error) {
+        const { message, messageKey } = toFriendlyOAuthError('Facebook', error);
+        return { success: false, message, messageKey };
+    }
     if (data?.url) return { success: true, redirectUrl: data.url };
-    return { success: false, message: 'Could not get sign-in URL.' };
+    return { success: false, message: 'Could not get sign-in URL.', messageKey: 'couldNotGetSignInUrl' };
 }
 
 /**

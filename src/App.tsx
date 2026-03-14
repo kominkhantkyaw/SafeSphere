@@ -160,6 +160,8 @@ const AppContent: React.FC = () => {
     const handleLogin = (role: string, user?: User) => {
         if (user) {
             login(user);
+            try { sessionStorage.removeItem('safesphere-install-banner-dismissed'); } catch {}
+            setInstallBannerDismissed(false);
             return;
         }
         // Create a user object with demo data for existing users
@@ -173,13 +175,15 @@ const AppContent: React.FC = () => {
             phone: '+1 234 567 8900',
             bloodType: 'O+',
             volunteerPoints: 24,
-            skills: role === 'Admin' ? ['Emergency Management', 'First Aid', 'Crisis Communication'] : 
+            skills: role === 'Admin' ? ['Emergency Management', 'First Aid', 'Crisis Communication'] :
                    role === 'Responder' ? ['First Aid', 'CPR Certified', 'Search & Rescue'] :
                    ['First Aid'],
             emergencyContactName: 'Emergency Contact',
             emergencyContactPhone: '+1 234 567 8901'
         };
         login(demoUser);
+        try { sessionStorage.removeItem('safesphere-install-banner-dismissed'); } catch {}
+        setInstallBannerDismissed(false);
     };
 
     const handleLogout = () => {

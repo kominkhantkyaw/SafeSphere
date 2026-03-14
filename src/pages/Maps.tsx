@@ -572,14 +572,26 @@ const Maps: React.FC = () => {
                     fillOpacity: 0.7
                 }).bindTooltip(`${mag.toFixed(1)} Mag - ${escapeHtml(eq.properties.place)}`, { direction: 'top' })
                 .bindPopup(`
-                    <div style="min-width: 120px; max-width: 90vw; font-family:'Inter',sans-serif;">
-                        <div style="border-bottom:1px solid #eee; padding-bottom:4px; margin-bottom:4px;">
-                            <b style="font-size:16px; color:${color};">${mag.toFixed(1)}</b> <span style="font-size:10px; text-transform:uppercase; color:#888;">Magnitude</span>
+                    <div class="safesphere-earthquake-popup" style="min-width: 120px; max-width: 90vw; font-family:'Inter',sans-serif;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;">
+                            <div style="border-bottom:1px solid #eee; padding-bottom:4px; flex:1; min-width:0;">
+                                <b style="font-size:16px; color:${color};">${mag.toFixed(1)}</b> <span style="font-size:10px; text-transform:uppercase; color:#888;">Magnitude</span>
+                            </div>
+                            <button type="button" class="safesphere-earthquake-popup-close" style="flex-shrink:0; width:28px; height:28px; min-width:28px; min-height:28px; border:none; border-radius:50%; background:#e5e7eb; color:#374151; font-size:18px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:bold;" title="${escapeHtml(t('close'))}" aria-label="${escapeHtml(t('close'))}">&times;</button>
                         </div>
-                        <div style="font-size:12px; font-weight:600; margin-bottom:2px;">${escapeHtml(eq.properties.place)}</div>
+                        <div style="font-size:12px; font-weight:600; margin-bottom:2px; word-break:break-word;">${escapeHtml(eq.properties.place)}</div>
                         <div style="font-size:10px; color:#666;">${new Date(eq.properties.time).toLocaleString()}</div>
                     </div>
                 `);
+                
+                circle.on('popupopen', function () {
+                    const popup = circle.getPopup();
+                    const container = popup.getContainer();
+                    const closeBtn = container?.querySelector('.safesphere-earthquake-popup-close');
+                    if (closeBtn) {
+                        closeBtn.addEventListener('click', function () { circle.closePopup(); }, { once: true });
+                    }
+                });
                 
                 circle.addTo(mapInstance.current);
                 markersRef.current.push(circle);
@@ -973,7 +985,7 @@ const Maps: React.FC = () => {
                 <div className="absolute top-20 right-3 left-3 sm:left-auto sm:right-4 z-[40] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 sm:w-72 animate-in slide-in-from-right-4">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xs font-bold text-gray-400 uppercase">{t('searchButton')}</h3>
-                        <button onClick={() => setShowSearchPanel(false)} className="p-1 hover:bg-gray-100 rounded-full" aria-label="Close">
+                        <button type="button" onClick={() => setShowSearchPanel(false)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gray-100 rounded-full" aria-label={t('close')}>
                             <Icons.X size={18} />
                         </button>
                     </div>
@@ -1024,7 +1036,10 @@ const Maps: React.FC = () => {
             {/* Layer Control Panel */}
             {showLayerControl && (
                 <div className="absolute top-20 right-3 left-3 sm:left-auto sm:right-4 z-[40] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 sm:w-72 animate-in slide-in-from-right-4 overflow-y-auto max-h-[70vh]">
-                    
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xs font-bold text-gray-400 uppercase">{t('dataLayers')}</h3>
+                        <button type="button" onClick={() => setShowLayerControl(false)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gray-100 rounded-full" aria-label={t('close')}><Icons.X size={16} /></button>
+                    </div>
                     {/* Base Map Switcher */}
                     <div className="mb-6">
                         <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">{t('baseMapStyle')}</h3>
@@ -1136,7 +1151,7 @@ const Maps: React.FC = () => {
                 <div className="absolute top-20 right-3 left-3 sm:left-auto sm:right-4 bottom-24 z-[39] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-gray-100 sm:w-72 animate-in slide-in-from-right-4 flex flex-col">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-bold flex items-center gap-2"><Icons.Activity className="text-yellow-600"/> {t('seismicEvents')}</h3>
-                        <button onClick={() => setShowQuakeList(false)} className="p-1 hover:bg-gray-100 rounded-full"><Icons.X size={16}/></button>
+                        <button type="button" onClick={() => setShowQuakeList(false)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gray-100 rounded-full" aria-label={t('close')}><Icons.X size={16} /></button>
                     </div>
                     
                     <div className="flex gap-2 mb-3">
@@ -1191,7 +1206,7 @@ const Maps: React.FC = () => {
                                 <span className="text-xs font-bold uppercase tracking-wider">{selectedSimEntity.callSign || selectedSimEntity.id}</span>
                             </div>
                         </div>
-                        <button onClick={() => setSelectedSimEntity(null)} className="text-white/40 hover:text-white"><Icons.X size={18} /></button>
+                        <button type="button" onClick={() => setSelectedSimEntity(null)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-white/40 hover:text-white rounded-full" aria-label={t('close')}><Icons.X size={18} /></button>
                     </div>
                     <p className="text-sm font-bold uppercase leading-tight mb-3">{selectedSimEntity.title || selectedSimEntity.name}</p>
                     {selectedSimEntity.category === 'AirNode' ? (
@@ -1231,7 +1246,7 @@ const Maps: React.FC = () => {
                                 </p>
                             </div>
                         </div>
-                        <button onClick={() => setSelectedItem(null)} className="p-2 hover:bg-gray-200 rounded-full">
+                        <button type="button" onClick={() => setSelectedItem(null)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-gray-200 rounded-full" aria-label={t('close')}>
                             <Icons.X size={20} />
                         </button>
                     </div>

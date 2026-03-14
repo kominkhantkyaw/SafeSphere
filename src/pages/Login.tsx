@@ -8,10 +8,30 @@ import { FaceScanModal } from '../components/FaceScanModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ThemeSettings } from '../types';
 import { requestAccount, confirmAccount, getPendingRegistration, authenticate } from '../services/api';
-import { completeMfaChallenge, getSupabaseSessionUser, isDemoUser, resendSignUpConfirmation, signInWithGoogle, signInWithFacebook, isSupabaseReady } from '../services/auth';
+import { completeMfaChallenge, getSupabaseSessionUser, isDemoUser, resendSignUpConfirmation, signInWithGoogle, signInWithFacebook } from '../services/auth';
+import { isSupabaseReady } from '../services/supabase';
 import { isWebAuthnAvailable, getWebAuthnAuthOptions, verifyWebAuthnAssertion } from '../services/webauthn';
 import { User } from '../types';
 import { COUNTRY_CODES } from '../constants';
+
+/** Full-page navigation to OAuth URL. Use location.href so the full query string is preserved (form.action can strip it in some browsers). Returns false if URL was invalid. */
+function navigateToOAuthUrl(url: string): boolean {
+    if (!url || typeof url !== 'string' || url.trim() === '') return false;
+    const fullUrl = url.trim();
+    if (!fullUrl.includes('?')) return false;
+    try {
+        window.location.href = fullUrl;
+        return true;
+    } catch {
+        const form = document.createElement('form');
+        form.method = 'GET';
+        form.setAttribute('action', fullUrl);
+        form.style.display = 'none';
+        document.body.appendChild(form);
+        form.submit();
+        return true;
+    }
+}
 
 interface LoginProps {
     onLogin: (role: 'Admin' | 'Responder' | 'Reporter', user?: User) => void;
@@ -599,8 +619,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                             type="button"
                                             onClick={async () => {
                                                 const result = await signInWithGoogle();
-                                                if (result.success) window.location.href = result.redirectUrl;
-                                                else setRegisterError(result.message);
+                                                if (result.success && result.redirectUrl) {
+                                                    if (!navigateToOAuthUrl(result.redirectUrl)) {
+                                                        setRegisterError(t('invalidSignInUrl'));
+                                                    }
+                                                    return;
+                                                }
+                                                if (!result.success) {
+                                                    const err = result as { message: string; messageKey?: string };
+                                                    setRegisterError(err.messageKey ? t(err.messageKey) : err.message);
+                                                }
                                             }}
                                             className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold transition-colors"
                                         >
@@ -611,8 +639,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                             type="button"
                                             onClick={async () => {
                                                 const result = await signInWithFacebook();
-                                                if (result.success) window.location.href = result.redirectUrl;
-                                                else setRegisterError(result.message);
+                                                if (result.success && result.redirectUrl) {
+                                                    if (!navigateToOAuthUrl(result.redirectUrl)) {
+                                                        setRegisterError(t('invalidSignInUrl'));
+                                                    }
+                                                    return;
+                                                }
+                                                if (!result.success) {
+                                                    const err = result as { message: string; messageKey?: string };
+                                                    setRegisterError(err.messageKey ? t(err.messageKey) : err.message);
+                                                }
                                             }}
                                             className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold transition-colors"
                                         >

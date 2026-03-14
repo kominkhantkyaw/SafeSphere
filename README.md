@@ -193,6 +193,20 @@ See `backend/supabase/README.md` for details.
   2. Deploy the Edge Function: `supabase functions deploy webauthn`.
   3. Set **SITE_URL** in the function’s secrets (e.g. `https://your-app.vercel.app`) so the correct `rpId` is used for WebAuthn.
 
+### Login with Google or Facebook (OAuth)
+
+**Login with Gmail** and **Login with Facebook** on the login page use Supabase OAuth. For them to work:
+
+1. **Redirect URLs** — In Supabase Dashboard go to **Authentication → URL Configuration**. Under **Redirect URLs**, add every URL where the app runs, for example:
+   - `https://www.safesphere.app`
+   - `https://www.safesphere.app/`
+   - `http://localhost:5173` (for local dev)
+   The redirect URL must match exactly (including trailing slash if you use it).
+2. **Site URL** — Set **Site URL** to your main app URL (e.g. `https://www.safesphere.app`).
+3. **Enable providers** — In **Authentication → Providers**, enable **Google** and/or **Facebook**, then add the **Client ID** and **Client Secret** from [Google Cloud Console](https://console.cloud.google.com/) (OAuth 2.0 credentials) or [Facebook for Developers](https://developers.facebook.com/) (Facebook Login product).
+
+If the OAuth URL does not open when you click the button, check the browser console for errors and ensure the redirect URLs above are listed in Supabase.
+
 ### Registration confirmation email (6-digit code)
 
 When users **Request Account**, the app sends a 6-digit code to their email so they can activate the account. To actually deliver that email, use your existing Supabase project (the same one in `.env.local`):
