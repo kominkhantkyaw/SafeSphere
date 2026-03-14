@@ -130,12 +130,6 @@ Use these to **run and test** the app with different roles. SafeSphere has **thr
 | **Responder** | responder@safesphere.app | ********  |
 | **Reporter**  | reporter@safesphere.app  | ********  |
 
-**For test purpose only** (do not commit or share):
-
-- **Admin:** `20Admin#26!`
-- **Responder:** `20Responder#26!`
-- **Reporter:** `20Reporter#26!`
-
 **How to test:**
 
 1. Run the app (`npm run dev`) and open http://localhost:3000.
