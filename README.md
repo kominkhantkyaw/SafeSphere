@@ -1,6 +1,4 @@
-# **Disaster Preparedness and Emergency Response Application**
-
-## Final Project — BSc Computer Science, University of London
+## **Disaster Preparedness and Emergency Response Application**
 
 **Live Demo:** [https://www.safesphere.app](https://www.safesphere.app)
 
@@ -248,7 +246,7 @@ SafeSphere/
 | **AI**         | Google Gemini (optional)        |
 | **Icons**      | Lucide React                    |
 | **Testing**    | Vitest, Testing Library         |
-| **Deployment** | Vercel                          |
+| **Deployment** | DigitalOcean                          |
 
 ---
 
