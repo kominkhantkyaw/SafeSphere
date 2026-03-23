@@ -20,15 +20,40 @@ secrets/
 **/apiKey*
 **/apikey*
 
-# ── Documentation & reports (keep locally only) ──
+# ── Documentation & reports (local only — not pushed) ───────────
+# Whole docs tree (notes, diagrams, rubrics, scripts, etc.)
 docs/
+
+# Office / academic file types
 *.pdf
+*.PDF
 *.docx
+*.DOCX
 *.doc
+*.DOC
 *.xlsx
 *.xls
 *.pptx
 *.ppt
+*.odt
+*.rtf
+
+# Markdown: ignore all; track ONLY README.md at repository root (not subfolders)
+*.md
+!/README.md
+
+# ── Images & design sources ─────────────────────
+# Raster/SVG used by the app (e.g. public/, src/) stay tracked — do not add *.png globally.
+# Anything under docs/ is already ignored (report figures, diagrams, etc.).
+# Design tool originals (local only):
+*.psd
+*.PSD
+*.ai
+*.sketch
+*.fig
+# Loose screenshots / exports you drop in the repo root or ad-hoc folders:
+screenshots/
+captures/
 
 # ── Archive files ─────────────────────────────────
 *.zip
@@ -36,22 +61,18 @@ docs/
 *.rar
 *.7z
 
-# ── Markdown: only README.md at root ─────────────
-*.md
-!README.md
-
-# ── Text and data exports (no sensitive or docs) ─
+# ── Text and data exports (optional local exports) ─
 *.txt
 !public/robots.txt
 *.csv
 
-# ── Database dumps (schema README is committed) ──
+# ── Database dumps / local DB files ─────────────────
 backend/supabase/safesphere_postgres.sql
 *.db
 *.sqlite
 *.sqlite3
 
-# ── Utility scripts (not needed in production) ───
+# ── Utility scripts (optional — remove this line if you want scripts pushed)
 scripts/
 
 # ── Logs ──────────────────────────────────────────
@@ -83,8 +104,12 @@ Thumbs.db
 # ── Vercel local cache ───────────────────────────
 .vercel/
 
-# ── Misc ──────────────────────────────────────────
+# ── Misc local trees (coursework bundles, drafts) ─
 metadata.json
 *.local
 Final/
 Project/
+CM3070/
+# Root placeholder files (empty markers; patterns above target directories only)
+/CM3070
+/Final

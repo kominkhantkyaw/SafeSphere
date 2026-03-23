@@ -22,8 +22,8 @@ Deno.serve(async (req) => {
     }
 
     try {
-        const accountSid = Deno.env.get('ACbf8bae30af1eab80f119c2858196c5b1');
-        const authToken = Deno.env.get('8X3JCFVEB54651GAMBZHB8VE);
+        const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+        const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
         const fromNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
 
         if (!accountSid || !authToken || !fromNumber) {
@@ -31,7 +31,8 @@ Deno.serve(async (req) => {
             return new Response(
                 JSON.stringify({
                     success: false,
-                    message: 'SMS service not configured. Set TWILIO_ACCOUNT_SID, 8X3JCFVEB54651GAMBZHB8VE, and TWILIO_PHONE_NUMBER.',
+                    message:
+                        'SMS service not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER.',
                 }),
                 { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );

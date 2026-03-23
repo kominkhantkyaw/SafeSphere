@@ -7,6 +7,7 @@ import { getRandomFloodZoneYangon } from '../constants';
 import { useUser } from '../contexts/UserContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import IncidentMap from './IncidentMap';
+import { getPrintableOsmMapTiles } from '../utils/printMapTiles';
 
 interface ReportFormProps {
     onCancel: () => void;
@@ -21,8 +22,10 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     const { t } = useLanguage();
     const [step, setStep] = useState<Step>('EDIT');
     const [loading, setLoading] = useState(false);
-    const [submittedId, setSubmittedId] = useState<number | null>(null);
+    const [submittedId, setSubmittedId] = useState<string | null>(null);
     const [showViewModal, setShowViewModal] = useState(false);
+    const [includeMapInPrint, setIncludeMapInPrint] = useState(true);
+    const [printSeq, setPrintSeq] = useState(0);
 
     // -- Form State --
     const [type, setType] = useState('Structural Fire');
@@ -48,9 +51,10 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     const [discussed, setDiscussed] = useState(false);
     const [mitigation, setMitigation] = useState('');
 
-    // Location
+    // Location — includeGpsMap false = submit with site description only (no map / GPS payload).
+    const [includeGpsMap, setIncludeGpsMap] = useState(false);
     const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
-    const [locating, setLocating] = useState(true);
+    const [locating, setLocating] = useState(false);
     const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
     const lastLocationRef = useRef<{lat: number, lng: number} | null>(null);
 
@@ -73,7 +77,16 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
             setUrgency(initialData.urgency || 'Medium');
             setDepartment(initialData.department || 'Main Building');
             setDescription(initialData.description);
-            setLocation({ lat: initialData.lat, lng: initialData.lng });
+            const siteOnly =
+                initialData.locationSource === 'site_only' ||
+                (initialData.lat === 0 && initialData.lng === 0 && initialData.locationSource !== 'gps');
+            if (siteOnly) {
+                setIncludeGpsMap(false);
+                setLocation(null);
+            } else {
+                setIncludeGpsMap(true);
+                setLocation({ lat: initialData.lat, lng: initialData.lng });
+            }
             setStructuralDamage(initialData.structuralDamage || 'None');
             setRepairDays(initialData.estRepairDays || 0);
             setCost(initialData.estCost || 0);
@@ -99,6 +112,11 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
         }
     }, [initialData]);
 
+    useEffect(() => {
+        if (printSeq === 0) return;
+        window.print();
+    }, [printSeq]);
+
     const stampSyncTime = useCallback(() => {
         setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }, []);
@@ -106,27 +124,72 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     const refreshLocation = useCallback((useCache = false) => {
         if (!('geolocation' in navigator)) return;
         setLocating(true);
+        const timeoutMs = useCache ? 5000 : 15000;
         const opts: PositionOptions = useCache
-            ? { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
-            : { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+            ? { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 300000 }
+            : { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 };
+
+        let finished = false;
+        let timeoutId: number | null = null;
+
+        const fallbackToReasonableLocation = () => {
+            if (lastLocationRef.current) {
+                setLocation(lastLocationRef.current);
+                stampSyncTime();
+                return;
+            }
+            if (type.toLowerCase().includes('flood')) {
+                const floodZone = getRandomFloodZoneYangon();
+                setLocation(floodZone);
+                lastLocationRef.current = floodZone;
+                stampSyncTime();
+                return;
+            }
+            // Final fallback: keep the form usable even when GPS is blocked.
+            const fallback = { lat: 16.866, lng: 96.195 };
+            setLocation(fallback);
+            lastLocationRef.current = fallback;
+            stampSyncTime();
+        };
+
+        const finish = (fn: () => void) => {
+            if (finished) return;
+            finished = true;
+            if (timeoutId != null) window.clearTimeout(timeoutId);
+            fn();
+        };
+
+        // If the browser never calls the GPS callbacks, avoid leaving the UI stuck in "Waiting".
+        timeoutId = window.setTimeout(() => {
+            finish(() => {
+                if (!useCache) {
+                    refreshLocation(true);
+                    return;
+                }
+                setLocating(false);
+                fallbackToReasonableLocation();
+            });
+        }, timeoutMs + 1500);
+
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                setLocation(coords);
-                lastLocationRef.current = coords;
-                stampSyncTime();
-                setLocating(false);
-            },
-            (err) => {
-                setLocating(false);
-                if (!useCache) refreshLocation(true);
-                else if (lastLocationRef.current) { setLocation(lastLocationRef.current); stampSyncTime(); }
-                else if (type.toLowerCase().includes('flood')) {
-                    const floodZone = getRandomFloodZoneYangon();
-                    setLocation(floodZone);
-                    lastLocationRef.current = floodZone;
+                finish(() => {
+                    const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    setLocation(coords);
+                    lastLocationRef.current = coords;
                     stampSyncTime();
-                }
+                    setLocating(false);
+                });
+            },
+            () => {
+                finish(() => {
+                    if (!useCache) {
+                        refreshLocation(true);
+                        return;
+                    }
+                    setLocating(false);
+                    fallbackToReasonableLocation();
+                });
             },
             opts
         );
@@ -141,38 +204,8 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
         setLocating(false);
     }, []);
 
-    // Auto-sync GPS: watchPosition for live updates (independent of map)
-    useEffect(() => {
-        if (initialData || !('geolocation' in navigator)) return;
-        setLocating(true);
-        const opts: PositionOptions = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
-        const watchId = navigator.geolocation.watchPosition(
-            (pos) => {
-                const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                setLocation(coords);
-                lastLocationRef.current = coords;
-                stampSyncTime();
-                setLocating(false);
-            },
-            (err) => {
-                setLocating(false);
-                if (err.code === 2 || err.code === 3) {
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                            const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                            setLocation(c);
-                            lastLocationRef.current = c;
-                            stampSyncTime();
-                        },
-                        () => { if (lastLocationRef.current) setLocation(lastLocationRef.current); },
-                        { enableHighAccuracy: false, timeout: 5000, maximumAge: 120000 }
-                    );
-                }
-            },
-            opts
-        );
-        return () => navigator.geolocation.clearWatch(watchId);
-    }, [initialData, stampSyncTime]);
+    // Auto-sync GPS (watchPosition) is intentionally disabled.
+    // The incident location should be pinned by the user (map click) or confirmed via the manual "Sync GPS" button.
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -315,23 +348,61 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     };
 
     const handleSubmit = async () => {
-        if (!location) { alert(t('pleaseIncludeLocation')); return; }
+        if (includeGpsMap && !location) {
+            alert(t('pleaseIncludeLocation'));
+            return;
+        }
+
         setLoading(true);
-        const newId = initialData?.id || Math.floor(Math.random() * 100000);
-        const reportData: Partial<IncidentReport> = {
-            id: newId, 
-            type, urgency, department, description, structuralDamage, estRepairDays: repairDays, estCost: cost,
-            repeatable, situationDiscussed: discussed, mitigationPlan: mitigation, lat: location.lat, lng: location.lng,
-            contactPerson, contactPhone: fullPhone, contactEmail: contactEmail || undefined,
-            timestamp: initialData?.timestamp || new Date().toLocaleTimeString(), image: image || undefined, video: video || undefined, audio: audio || undefined,
-            reporterId: user?.id
-        };
-        const success = await submitReport(reportData);
-        setLoading(false);
-        if (success) { setSubmittedId(newId); setStep('SUCCESS'); } else { alert(t('failedToSubmit')); }
+        try {
+            const newId =
+                initialData?.id != null ? String(initialData.id) : String(Math.floor(Math.random() * 100000));
+            const reportData: Partial<IncidentReport> = {
+                id: newId,
+                type,
+                urgency,
+                department,
+                description,
+                structuralDamage,
+                estRepairDays: repairDays,
+                estCost: cost,
+                repeatable,
+                situationDiscussed: discussed,
+                mitigationPlan: mitigation,
+                lat: includeGpsMap && location ? location.lat : 0,
+                lng: includeGpsMap && location ? location.lng : 0,
+                locationSource: includeGpsMap && location ? 'gps' : 'site_only',
+                contactPerson,
+                contactPhone: fullPhone,
+                contactEmail: contactEmail || undefined,
+                timestamp: initialData?.timestamp || new Date().toLocaleTimeString(),
+                image: image || undefined,
+                video: video || undefined,
+                audio: audio || undefined,
+                reporterId: user?.id,
+                // Keep pending / info_requested (etc.) when reporter updates before responder approval.
+                status: initialData?.status,
+            };
+
+            const success = await submitReport(reportData);
+            if (success) {
+                setSubmittedId(newId);
+                setStep('SUCCESS');
+            } else {
+                alert(t('failedToSubmit'));
+            }
+        } catch (err) {
+            console.error('[ReportForm] submit failed:', err);
+            alert(t('failedToSubmit'));
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const handlePrint = () => window.print();
+    const requestPrint = useCallback((withMap: boolean) => {
+        setIncludeMapInPrint(withMap);
+        setPrintSeq((s) => s + 1);
+    }, []);
 
     const handleShare = async () => {
         const shareUrl = submittedId ? `${window.location.origin}/report/${submittedId}` : window.location.href;
@@ -343,7 +414,17 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     const renderHeader = (title: string, icon: React.ReactNode) => (
         <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold flex items-center gap-2">{icon} {title}</h2>
-            {step === 'EDIT' && <button onClick={onCancel} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><Icons.X size={20} /></button>}
+            {step === 'EDIT' && (
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    title={t('closeButton')}
+                    aria-label={t('closeButton')}
+                    className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"
+                >
+                    <Icons.X size={20} />
+                </button>
+            )}
         </div>
     );
 
@@ -356,13 +437,20 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                         <div className="flex justify-between"><span className="text-gray-500">{t('hazardType')}:</span> <span className="font-bold">{type}</span></div>
                         <div className="flex justify-between"><span className="text-gray-500">{t('urgencyLabel')}:</span> <span className={`font-bold ${urgency === 'Critical' ? 'text-red-600' : 'text-black'}`}>{urgency}</span></div>
                         <div className="flex justify-between"><span className="text-gray-500">{t('incidentLocation')}:</span> <span className="font-bold">{department}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-500">{t('gpsLabel')}:</span> <span className="font-mono">{location?.lat.toFixed(5)}, {location?.lng.toFixed(5)}</span></div>
+                        <div className="flex justify-between gap-2">
+                            <span className="text-gray-500 shrink-0">{t('gpsLabel')}:</span>
+                            <span className={`font-mono text-right text-xs sm:text-sm ${includeGpsMap && location ? '' : 'text-amber-700 font-sans font-semibold'}`}>
+                                {includeGpsMap && location
+                                    ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`
+                                    : t('reportGpsNotIncluded')}
+                            </span>
+                        </div>
                     </div>
-                    {location && typeof window !== 'undefined' && window.L && (
+                    {includeGpsMap && location && typeof window !== 'undefined' && window.L && (
                         <div className="rounded-xl overflow-hidden border border-gray-200">
                             <p className="text-xs font-bold text-gray-500 uppercase mb-2">{t('incidentLocationMap')}</p>
                             <div className="w-full aspect-[4/3] min-h-[200px]">
-                                <IncidentMap reports={[{ id: 0, lat: location.lat, lng: location.lng, type, description, timestamp: new Date().toLocaleTimeString(), status: 'pending' }]} centerLat={location.lat} centerLng={location.lng} />
+                                <IncidentMap reports={[{ id: '0', lat: location.lat, lng: location.lng, type, description, timestamp: new Date().toLocaleTimeString(), status: 'pending' }]} centerLat={location.lat} centerLng={location.lng} />
                             </div>
                         </div>
                     )}
@@ -403,19 +491,39 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
         const reportUrl = `${window.location.origin}/report/${submittedId}`;
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(reportUrl)}`;
         const handleDownloadQR = async () => {
+            const fname = `SafeSphere-QR-${submittedId}.png`;
             try {
                 const response = await fetch(qrUrl);
                 const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
+                if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && typeof File !== 'undefined') {
+                    try {
+                        const file = new File([blob], fname, { type: blob.type || 'image/png' });
+                        const data: ShareData = { files: [file], title: fname };
+                        if (!navigator.canShare || navigator.canShare(data)) {
+                            await navigator.share(data);
+                            return;
+                        }
+                    } catch (err) {
+                        if ((err as Error).name === 'AbortError') return;
+                    }
+                }
+                const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `SafeSphere-QR-${submittedId}.png`;
+                link.download = fname;
+                link.rel = 'noopener';
+                link.style.display = 'none';
                 document.body.appendChild(link);
                 link.click();
-                document.body.removeChild(link);
-            } catch (error) { window.open(qrUrl, '_blank'); }
+                window.setTimeout(() => {
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }, 500);
+            } catch {
+                window.open(qrUrl, '_blank');
+            }
         };
-        const handleDownloadReport = () => {
+        const handleDownloadReport = async () => {
             const lines = [
                 'SAFE SPHERE INCIDENT REPORT',
                 '===========================',
@@ -429,9 +537,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 `Description: ${description}`,
                 '',
                 'LOCATION (GPS)',
-                `Latitude: ${location?.lat?.toFixed(6) ?? 'N/A'}`,
-                `Longitude: ${location?.lng?.toFixed(6) ?? 'N/A'}`,
-                `Map: https://www.google.com/maps?q=${location?.lat},${location?.lng}`,
+                location
+                    ? `Latitude: ${location.lat.toFixed(6)}\nLongitude: ${location.lng.toFixed(6)}\nMap: https://www.google.com/maps?q=${location.lat},${location.lng}`
+                    : t('reportPrintNoGpsCoordinates'),
                 '',
                 'CONTACT',
                 `Name: ${contactPerson || 'N/A'}`,
@@ -449,47 +557,57 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 `Video: ${video ? 'Yes' : 'No'}`,
                 `Audio: ${audio ? 'Yes' : 'No'}`,
                 '',
-                '--- SafeSphere ---'
+                '--- SafeSphere ---',
             ];
             const text = lines.join('\n');
-            const element = document.createElement('a');
-            element.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-            element.download = `Incident_Report_${submittedId}.txt`;
-            document.body.appendChild(element);
-            element.click();
-            document.body.removeChild(element);
-            URL.revokeObjectURL(element.href);
+            const filename = `Incident_Report_${submittedId}.txt`;
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+
+            if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && typeof File !== 'undefined') {
+                try {
+                    const file = new File([blob], filename, { type: 'text/plain' });
+                    const fileShare: ShareData = { files: [file], title: filename };
+                    if (!navigator.canShare || navigator.canShare(fileShare)) {
+                        await navigator.share(fileShare);
+                        return;
+                    }
+                } catch (err) {
+                    if ((err as Error).name === 'AbortError') return;
+                }
+                try {
+                    await navigator.share({ title: filename, text });
+                    return;
+                } catch (err) {
+                    if ((err as Error).name === 'AbortError') return;
+                }
+            }
+
+            try {
+                const objectUrl = URL.createObjectURL(blob);
+                const element = document.createElement('a');
+                element.href = objectUrl;
+                element.download = filename;
+                element.rel = 'noopener';
+                element.style.display = 'none';
+                document.body.appendChild(element);
+                element.click();
+                window.setTimeout(() => {
+                    document.body.removeChild(element);
+                    URL.revokeObjectURL(objectUrl);
+                }, 500);
+                return;
+            } catch {
+                /* fall through */
+            }
+
+            try {
+                await navigator.clipboard.writeText(text);
+                alert(t('reportDownloadCopied'));
+            } catch {
+                alert(t('reportDownloadFailed'));
+            }
         };
         const handleDelete = () => { if (window.confirm(t('deleteReportConfirm'))) onCancel(); };
-
-        const getStaticMapTiles = (lat: number, lng: number, gridSize: 1 | 4 = 1) => {
-            const zoom = gridSize === 4 ? 15 : 16;
-            const n = Math.pow(2, zoom);
-            const x = Math.floor((lng + 180) / 360 * n);
-            const latRad = (lat * Math.PI) / 180;
-            const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-            const xtileRaw = (lng + 180) / 360 * n;
-            const ytileRaw = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
-            const fracX = xtileRaw - Math.floor(xtileRaw);
-            const fracY = ytileRaw - Math.floor(ytileRaw);
-            const tileSize = 256;
-            const base = 'https://tile.openstreetmap.org';
-            if (gridSize === 4) {
-                const tiles = [
-                    { url: `${base}/${zoom}/${x - 1}/${y - 1}.png`, left: 0, top: 0 },
-                    { url: `${base}/${zoom}/${x}/${y - 1}.png`, left: tileSize, top: 0 },
-                    { url: `${base}/${zoom}/${x - 1}/${y}.png`, left: 0, top: tileSize },
-                    { url: `${base}/${zoom}/${x}/${y}.png`, left: tileSize, top: tileSize },
-                ];
-                const markerLeft = tileSize + fracX * tileSize - 5;
-                const markerTop = tileSize + fracY * tileSize - 5;
-                return { tiles, markerLeft, markerTop, gridSize: 4 as const };
-            }
-            const tileUrl = `${base}/${zoom}/${x}/${y}.png`;
-            const markerLeft = fracX * tileSize - 5;
-            const markerTop = fracY * tileSize - 5;
-            return { tileUrl, markerLeft, markerTop, gridSize: 1 as const };
-        };
 
         const printContent = (
             <div className="report-print-content" style={{ fontFamily: 'Inter, sans-serif', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -505,12 +623,16 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                         <tr><td style={{ padding: '3px 0', color: '#6b7280', width: '28%', fontSize: 9 }}>Hazard Type</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{type}</td></tr>
                         <tr><td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>Urgency</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{urgency}</td></tr>
                         <tr><td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>Location</td><td style={{ padding: '3px 0', fontWeight: 600, fontSize: 9 }}>{department}</td></tr>
-                        <tr><td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>Location</td><td style={{ padding: '3px 0', fontFamily: 'monospace', fontSize: 8 }}>{location?.lat.toFixed(5)}, {location?.lng.toFixed(5)}</td></tr>
+                        <tr>
+                            <td style={{ padding: '3px 0', color: '#6b7280', fontSize: 9 }}>{t('locationGps')}</td>
+                            <td style={{ padding: '3px 0', fontFamily: 'monospace', fontSize: 8 }}>
+                                {location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : t('reportPrintNoGpsCoordinates')}
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
-                {location && (() => {
-                    const res = getStaticMapTiles(location.lat, location.lng, 4);
-                    if (res.gridSize !== 4 || !('tiles' in res)) return null;
+                {location && includeMapInPrint && (() => {
+                    const res = getPrintableOsmMapTiles(location.lat, location.lng);
                     const srcSize = 512;
                     const pw = 567;
                     const ph = 424;
@@ -519,11 +641,11 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                     const markerSize = 18;
                     return (
                         <div className="report-print-map" style={{ width: '100%', marginBottom: 6 }}>
-                            <p style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Incident Location Map</p>
+                            <p style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{t('incidentPrintMapHeading')}</p>
                             <div className="report-print-map-inner" style={{ position: 'relative', width: '100%', aspectRatio: '4/3', overflow: 'hidden', borderRadius: 8, border: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
                                 <div style={{ position: 'absolute', left: 0, top: 0, width: srcSize, height: srcSize, transform: `scale(${scaleX}, ${scaleY})`, transformOrigin: 'top left' }}>
-                                    {res.tiles.map((t, i) => (
-                                        <img key={i} src={t.url} alt="" style={{ position: 'absolute', left: t.left, top: t.top, width: 600, height: 500, marginLeft: -t.left, marginTop: -t.top }} />
+                                    {res.tiles.map((tile, i) => (
+                                        <img key={i} src={tile.url} alt="" style={{ position: 'absolute', left: tile.left, top: tile.top, width: 600, height: 500, marginLeft: -tile.left, marginTop: -tile.top }} />
                                     ))}
                                 </div>
                                 <div style={{ position: 'absolute', left: res.markerLeft * scaleX - markerSize / 2, top: res.markerTop * scaleY - markerSize / 2, width: markerSize, height: markerSize, borderRadius: '50%', backgroundColor: '#ef4444', border: '3px solid white', boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }} />
@@ -531,6 +653,12 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                         </div>
                     );
                 })()}
+                {location && !includeMapInPrint && (
+                    <p style={{ margin: '0 0 8px', padding: 8, backgroundColor: '#f9fafb', borderRadius: 4, border: '1px solid #e5e7eb', fontSize: 9, color: '#4b5563' }}>{t('reportPrintOmitMapNote')}</p>
+                )}
+                {!location && (
+                    <p style={{ margin: '0 0 8px', padding: 8, backgroundColor: '#fffbeb', borderRadius: 4, border: '1px solid #fcd34d', fontSize: 9, color: '#92400e' }}>{t('reportPrintNoGpsCoordinates')}</p>
+                )}
                 {(contactPerson || fullPhone || contactEmail) && (
                     <div style={{ marginBottom: 8, padding: 8, backgroundColor: '#eff6ff', borderRadius: 4, border: '1px solid #bfdbfe' }}>
                         <p style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>Point of Contact</p>
@@ -671,16 +799,32 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 {/* QR Code */}
                 <div className="bg-white border-2 border-gray-100 p-4 rounded-xl inline-block mb-5 shadow-inner relative group">
                     <img src={qrUrl} alt="QR Code" className="w-28 h-28 mix-blend-multiply" />
-                    <button onClick={handleDownloadQR} className="absolute -bottom-2 -right-2 w-9 h-9 bg-black text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform cursor-pointer" title={t('download')}><Icons.Download size={14} /></button>
+                    <button onClick={() => void handleDownloadQR()} className="absolute -bottom-2 -right-2 w-9 h-9 bg-black text-white rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform cursor-pointer" title={t('downloadQrImage')} type="button"><Icons.Download size={14} /></button>
                     <div className="text-[10px] text-gray-400 mt-2 font-mono uppercase tracking-wider">{t('scanToViewCase')}</div>
                 </div>
 
                 {/* Actions */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                    <button onClick={() => setShowViewModal(true)} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><Icons.Info size={18} /></div><span className="text-xs font-medium">{t('viewReport')}</span></button>
-                    <button onClick={handlePrint} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center"><Icons.Printer size={18} /></div><span className="text-xs font-medium">{t('print')}</span></button>
-                    <button onClick={handleDownloadReport} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center"><Icons.Download size={18} /></div><span className="text-xs font-medium">{t('download')}</span></button>
-                    <button onClick={handleShare} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center"><Icons.Share size={18} /></div><span className="text-xs font-medium">{t('share')}</span></button>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                    <button type="button" onClick={() => setShowViewModal(true)} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><Icons.Info size={18} /></div><span className="text-xs font-medium text-center leading-tight">{t('viewReport')}</span></button>
+                    <button type="button" onClick={() => void handleDownloadReport()} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center"><Icons.Download size={18} /></div><span className="text-xs font-medium text-center leading-tight">{t('downloadIncidentReport')}</span></button>
+                    <button type="button" onClick={handleShare} className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100 active:scale-95"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center"><Icons.Share size={18} /></div><span className="text-xs font-medium text-center leading-tight">{t('share')}</span></button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-5">
+                    <button type="button" onClick={() => requestPrint(false)} className="flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-xl border-2 border-gray-200 hover:bg-gray-50 transition-colors active:scale-[0.98] min-h-[72px]"><Icons.Printer size={18} className="text-gray-600" /><span className="text-[11px] sm:text-xs font-semibold text-center text-gray-800 leading-tight">{t('reportPrintWithoutMap')}</span></button>
+                    <button
+                        type="button"
+                        disabled={!location}
+                        title={!location ? t('reportGpsNotIncluded') : undefined}
+                        onClick={() => requestPrint(true)}
+                        className={`flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-xl border-2 transition-colors active:scale-[0.98] min-h-[72px] ${
+                            location
+                                ? 'border-blue-600 hover:bg-blue-50'
+                                : 'border-gray-200 opacity-50 cursor-not-allowed'
+                        }`}
+                    >
+                        <Icons.Printer size={18} className={location ? 'text-blue-700' : 'text-gray-400'} />
+                        <span className={`text-[11px] sm:text-xs font-semibold text-center leading-tight ${location ? 'text-blue-900' : 'text-gray-500'}`}>{t('reportPrintWithMap')}</span>
+                    </button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 border-t pt-4">
                     <button onClick={() => { setStep('EDIT'); }} className="flex items-center justify-center gap-2 py-2.5 text-sm font-bold text-gray-600 hover:text-black hover:bg-gray-50 rounded-lg min-h-[44px]"><Icons.Edit size={16} /> {t('editReport')}</button>
@@ -694,7 +838,15 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                         <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[85vh] flex flex-col">
                             <div className="p-4 border-b flex justify-between items-center">
                                 <h3 className="font-bold text-lg">{t('incidentReportTitle')} #{submittedId}</h3>
-                                <button onClick={() => setShowViewModal(false)} className="p-2 hover:bg-gray-100 rounded-full min-w-[44px] min-h-[44px] flex items-center justify-center"><Icons.X size={20} /></button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowViewModal(false)}
+                                    title={t('closeButton')}
+                                    aria-label={t('closeButton')}
+                                    className="p-2 hover:bg-gray-100 rounded-full min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                >
+                                    <Icons.X size={20} />
+                                </button>
                             </div>
                             <div className="p-4 overflow-y-auto flex-1 space-y-4 text-sm">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -709,8 +861,14 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                                 </div>
                                 <div>
                                     <span className="text-gray-500 block text-xs uppercase font-bold mb-1">{t('locationGps')}</span>
-                                    <p className="font-mono text-xs">{location?.lat?.toFixed(6)}, {location?.lng?.toFixed(6)}</p>
-                                    <a href={`https://www.google.com/maps?q=${location?.lat},${location?.lng}`} target="_blank" rel="noreferrer" className="text-blue-600 text-xs mt-1 inline-flex items-center gap-1">View on map <Icons.ChevronRight size={12} /></a>
+                                    {location ? (
+                                        <>
+                                            <p className="font-mono text-xs">{location.lat.toFixed(6)}, {location.lng.toFixed(6)}</p>
+                                            <a href={`https://www.google.com/maps?q=${location.lat},${location.lng}`} target="_blank" rel="noreferrer" className="text-blue-600 text-xs mt-1 inline-flex items-center gap-1">View on map <Icons.ChevronRight size={12} /></a>
+                                        </>
+                                    ) : (
+                                        <p className="text-xs text-amber-800 bg-amber-50 rounded-lg p-2 border border-amber-100">{t('reportGpsNotIncluded')}</p>
+                                    )}
                                 </div>
                                 {(contactPerson || fullPhone || contactEmail) && (
                                     <div>
@@ -731,9 +889,22 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                                     <p className="flex gap-2 flex-wrap">{image && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{t('imageAttached')}</span>}{video && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">{t('videoAttached')}</span>}{audio && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">{t('audioAttached')}</span>}{!image && !video && !audio && <span className="text-gray-400">{t('noneLabel')}</span>}</p>
                                 </div>
                             </div>
-                            <div className="p-4 border-t flex gap-2">
-                                <button onClick={handlePrint} className="flex-1 py-2.5 rounded-xl bg-gray-100 font-semibold text-gray-700 flex items-center justify-center gap-2 min-h-[44px]"><Icons.Printer size={16} /> {t('print')}</button>
-                                <button onClick={handleDownloadReport} className="flex-1 py-2.5 rounded-xl bg-black text-white font-semibold flex items-center justify-center gap-2 min-h-[44px]"><Icons.Download size={16} /> {t('download')}</button>
+                            <div className="p-4 border-t flex flex-col gap-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button type="button" onClick={() => requestPrint(false)} className="py-2.5 rounded-xl bg-gray-100 font-semibold text-gray-700 flex items-center justify-center gap-1.5 min-h-[44px] text-xs sm:text-sm"><Icons.Printer size={16} /> {t('reportPrintWithoutMap')}</button>
+                                    <button
+                                        type="button"
+                                        disabled={!location}
+                                        title={!location ? t('reportGpsNotIncluded') : undefined}
+                                        onClick={() => requestPrint(true)}
+                                        className={`py-2.5 rounded-xl font-semibold flex items-center justify-center gap-1.5 min-h-[44px] text-xs sm:text-sm ${
+                                            location ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        <Icons.Printer size={16} /> {t('reportPrintWithMap')}
+                                    </button>
+                                </div>
+                                <button type="button" onClick={() => void handleDownloadReport()} className="w-full py-2.5 rounded-xl border-2 border-gray-200 font-semibold text-gray-800 flex items-center justify-center gap-2 min-h-[44px]"><Icons.Download size={16} /> {t('downloadIncidentReport')}</button>
                             </div>
                         </div>
                     </div>
@@ -745,18 +916,26 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
     return (
         <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100 h-full overflow-y-auto">
             {renderHeader(initialData ? `${t('edit')} Incident #${initialData.id}` : t('reportIncident'), <Icons.Emergency className="text-red-500" size={24} />)}
-            <form onSubmit={(e) => {
-                e.preventDefault();
-                if (!location) {
-                    alert(t('locationConfirmRequired'));
-                    return;
-                }
-                setStep('REVIEW');
-            }} className="space-y-4 pb-6">
+            <form
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    if (includeGpsMap && !location) {
+                        alert(t('locationConfirmRequired'));
+                        return;
+                    }
+                    setStep('REVIEW');
+                }}
+                className="space-y-4 pb-6"
+            >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('hazardType')}</label>
-                        <select value={type} onChange={(e) => setType(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white">
+                        <label htmlFor="hazard-type" className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('hazardType')}</label>
+                        <select
+                            id="hazard-type"
+                            value={type}
+                            onChange={(e) => setType(e.target.value)}
+                            className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white"
+                        >
                             <option value="Structural Fire">{t('structuralFire')}</option>
                             <option value="Flash Flood">{t('flashFlood')}</option>
                             <option value="Earthquake">{t('earthquake')}</option>
@@ -776,8 +955,13 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('incidentLocation')}</label>
-                        <select value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white">
+                        <label htmlFor="incident-location" className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('incidentLocation')}</label>
+                        <select
+                            id="incident-location"
+                            value={department}
+                            onChange={(e) => setDepartment(e.target.value)}
+                            className="w-full p-2.5 rounded-xl border border-gray-300 text-sm bg-white"
+                        >
                             <option value="Main Building">{t('mainBuilding')}</option>
                             <option value="Office">{t('office')}</option>
                             <option value="Company Compound">{t('companyCompound')}</option>
@@ -878,7 +1062,44 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                 </div>
 
                 <div className="flex items-center gap-3"><input type="checkbox" id="repeatable" checked={repeatable} onChange={(e) => setRepeatable(e.target.checked)} className="w-5 h-5 rounded border-gray-300 text-black focus:ring-black"/><label htmlFor="repeatable" className="text-sm font-medium text-gray-700">{t('repeatableIncident')}</label></div>
-                {/* GPS Location Card */}
+
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('reportLocationModeLabel')}</label>
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-gray-800/80 rounded-xl">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIncludeGpsMap(false);
+                                setLocation(null);
+                            }}
+                            className={`py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                                !includeGpsMap
+                                    ? 'bg-white dark:bg-gray-900 shadow text-black dark:text-white ring-2 ring-black/10'
+                                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                            }`}
+                        >
+                            {t('reportLocationTextOnlyTitle')}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setIncludeGpsMap(true)}
+                            className={`py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                                includeGpsMap
+                                    ? 'bg-white dark:bg-gray-900 shadow text-black dark:text-white ring-2 ring-blue-200'
+                                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                            }`}
+                        >
+                            {t('reportLocationWithGpsTitle')}
+                        </button>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 leading-snug">
+                        {includeGpsMap ? t('reportLocationWithGpsHint') : t('reportLocationTextOnlyHint')}
+                    </p>
+                </div>
+
+                {/* GPS Location Card + map — only when reporter chose GPS mode */}
+                {includeGpsMap && (
+                <>
                 <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('gpsLocationLabel')}</label>
                     <div className={`rounded-xl border-2 p-4 transition-all duration-300 ${location ? 'border-green-200 bg-gradient-to-br from-green-50/80 to-emerald-50/40' : locating ? 'border-blue-200 bg-gradient-to-br from-blue-50/60 to-sky-50/30' : 'border-gray-200 bg-gray-50'}`}>
@@ -964,25 +1185,68 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                     )}
                 </div>
                 {typeof window !== 'undefined' && window.L && (
-                    <div className="rounded-xl overflow-hidden border border-gray-200">
-                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">{t('incidentLocationMap')} <span className="text-green-600 font-normal">({t('gpsActive')})</span></p>
+                    <div className="rounded-xl overflow-hidden border border-gray-200 mt-3">
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-2 px-1">{t('incidentLocationMap')} <span className="text-green-600 font-normal">({t('gpsActive')})</span></p>
                         <div className="w-full aspect-[4/3] min-h-[200px]">
                             <IncidentMap
-                                reports={location ? [{ id: 0, lat: location.lat, lng: location.lng, type, description: '', timestamp: new Date().toLocaleTimeString(), status: 'pending' }] : []}
+                                reports={location ? [{ id: '0', lat: location.lat, lng: location.lng, type, description: '', timestamp: new Date().toLocaleTimeString(), status: 'pending' }] : []}
                                 centerLat={location?.lat ?? 16.866}
                                 centerLng={location?.lng ?? 96.195}
-                                showUserLocation
                                 onLocationUpdate={handleLocationUpdate}
                             />
                         </div>
                     </div>
                 )}
+                </>
+                )}
                 <div className="border-t pt-3">
                     <button type="button" onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-2 text-sm font-bold text-blue-600"><Icons.ChevronRight size={16} className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} /> {t('advancedDetails')}</button>
                     {showAdvanced && (
                         <div className="mt-3 space-y-3 animate-in slide-in-from-top-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('structuralDamageLabel')}</label><select value={structuralDamage} onChange={(e) => setStructuralDamage(e.target.value)} className="w-full p-2.5 rounded-lg border text-sm"><option>None</option><option>Minor</option><option>Major</option><option>Total Loss</option></select></div><div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('estRepairDays')}</label><input type="number" value={repairDays} onChange={(e) => setRepairDays(Number(e.target.value))} className="w-full p-2.5 rounded-lg border text-sm"/></div></div>
-                            <div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('estCostLabel')}</label><input type="number" value={cost} onChange={(e) => setCost(Number(e.target.value))} className="w-full p-2.5 rounded-lg border text-sm"/></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label htmlFor="structural-damage" className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">
+                                    {t('structuralDamageLabel')}
+                                </label>
+                                <select
+                                    id="structural-damage"
+                                    value={structuralDamage}
+                                    onChange={(e) => setStructuralDamage(e.target.value)}
+                                    className="w-full p-2.5 rounded-lg border text-sm"
+                                >
+                                    <option>None</option>
+                                    <option>Minor</option>
+                                    <option>Major</option>
+                                    <option>Total Loss</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="est-repair-days" className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">
+                                    {t('estRepairDays')}
+                                </label>
+                                <input
+                                    id="est-repair-days"
+                                    type="number"
+                                    value={repairDays}
+                                    onChange={(e) => setRepairDays(Number(e.target.value))}
+                                    placeholder="0"
+                                    className="w-full p-2.5 rounded-lg border text-sm"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="est-cost" className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">
+                                {t('estCostLabel')}
+                            </label>
+                            <input
+                                id="est-cost"
+                                type="number"
+                                value={cost}
+                                onChange={(e) => setCost(Number(e.target.value))}
+                                placeholder="0"
+                                className="w-full p-2.5 rounded-lg border text-sm"
+                            />
+                        </div>
                             <div className="flex flex-col gap-2"><label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={discussed} onChange={(e) => setDiscussed(e.target.checked)} className="rounded text-blue-600"/> {t('situationDiscussed')}</label></div>
                             <div><label className="block text-[11px] sm:text-xs font-bold text-gray-500 uppercase mb-1">{t('followUpMitigation')}</label><textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder={t('requiredActionsPlaceholder')} className="w-full p-2.5 rounded-lg border text-sm h-16"/></div>
                         </div>
@@ -1073,8 +1337,16 @@ const ReportForm: React.FC<ReportFormProps> = ({ onCancel, onSuccess, initialDat
                     )}
                 </div>
                 <div className="flex gap-3 pt-4">
-                    {!location && <p className="text-xs text-gray-500">{t('locationSyncHint')}</p>}
-                    <button type="submit" disabled={!location} className={`w-full py-3 rounded-xl font-bold text-sm shadow-lg shadow-gray-200 ${location ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}>{initialData ? t('save') : t('reviewReport')}</button>
+                    {includeGpsMap && !location && <p className="text-xs text-gray-500">{t('locationSyncHint')}</p>}
+                    <button
+                        type="submit"
+                        disabled={!(!includeGpsMap || !!location)}
+                        className={`w-full py-3 rounded-xl font-bold text-sm shadow-lg shadow-gray-200 ${
+                            !includeGpsMap || location ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                    >
+                        {initialData ? t('save') : t('reviewReport')}
+                    </button>
                 </div>
             </form>
         </div>

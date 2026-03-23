@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ChecklistItem, DrillSession, IncidentReport, User } from '../types';
 import { Icons } from '../components/Icon';
+import { RichTextEditor } from '../components/RichTextEditor';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useUser } from '../contexts/UserContext';
-import { fetchAlerts, fetchChecklist, fetchDrills, fetchEarthquakesByRange, fetchReports } from '../services/api';
+import { archiveAlert, deleteAlert, fetchAlerts, fetchChecklist, fetchDrills, fetchEarthquakesByRange, fetchReports, setAlertResolved, submitAlert, updateAlert } from '../services/api';
 import { fetchWeather, fetchLocationName, WeatherData, LocationInfo } from '../services/weather';
+import { canBroadcastAlerts } from '../utils/permissions';
 
 interface HomeProps {
     onNavigate: (tab: string) => void;
@@ -22,6 +24,26 @@ const TwoLineLabel: React.FC<{ text: string; className?: string }> = ({ text, cl
     );
 };
 
+function stripHtml(input: string): string {
+    return (input ?? '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .trim();
+}
+
+function sanitizeHtmlForStorage(input: string): string {
+    // Very small sanitiser for our use-case (formatting produced by our own editor).
+    // Removes scripts and common event-handler / javascript: vectors.
+    return (input ?? '')
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\shref\s*=\s*(['"])\s*javascript:[\s\S]*?\1/gi, ' href="#"')
+        .replace(/\sstyle\s*=\s*(['"]).*?\1/gi, (m) => m); // allow style/font tags if present
+}
+
+const richTextLooksLikeHtml = (s: string) => (s ?? '').includes('<');
+
 const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
     const { t, translateDescription, translateAlertTitle } = useLanguage();
     const { user: contextUser } = useUser();
@@ -34,10 +56,74 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
     const [showScoreDetails, setShowScoreDetails] = useState(false);
     const [chartRange, setChartRange] = useState<'24h' | '7d' | '1M' | '1Y'>('24h');
     const [showBroadcastForm, setShowBroadcastForm] = useState(false);
+    const [broadcastBusy, setBroadcastBusy] = useState(false);
+    const [showAlertManager, setShowAlertManager] = useState(false);
+    const [alertManagerTab, setAlertManagerTab] = useState<'broadcast' | 'active' | 'resolved' | 'archived'>('active');
+    const [showMoreActiveAlerts, setShowMoreActiveAlerts] = useState(false);
+    const [editingAlertId, setEditingAlertId] = useState<number | null>(null);
+    const [alertEditorBusy, setAlertEditorBusy] = useState(false);
+    const [alertEditorForm, setAlertEditorForm] = useState({
+        title: '',
+        severity: 'low' as 'low' | 'moderate' | 'high',
+        type: '',
+        description: '',
+    });
+    const [alertSearch, setAlertSearch] = useState('');
+    const [alertSeverityFilter, setAlertSeverityFilter] = useState<'all' | 'low' | 'moderate' | 'high'>('all');
+    const [alertTypeFilter, setAlertTypeFilter] = useState<string>('all');
+
+    const PRESET_TYPE_DISPLAY: Record<string, string> = useMemo(() => ({
+        general: 'General',
+        flood: 'Flood',
+        fire: 'Fire',
+        earthquake: 'Earthquake',
+        tsunami: 'Tsunami',
+        volcano: 'Volcano',
+        hurricane: 'Hurricane',
+        storm: 'Storm',
+    }), []);
+
+    const toDisplayAlertType = (type?: string): string => {
+        const raw = (type || '').trim();
+        if (!raw) return '';
+
+        // Handle old/buggy duplicate values like "fire Fire" -> display "Fire"
+        const parts = raw.split(/\s+/);
+        if (parts.length === 2) {
+            const [a, b] = parts;
+            const aLower = a.toLowerCase();
+            const expectedDisplay = PRESET_TYPE_DISPLAY[aLower];
+            if (expectedDisplay && b.toLowerCase() === expectedDisplay.toLowerCase()) return expectedDisplay;
+        }
+
+        const key = raw.toLowerCase();
+        return PRESET_TYPE_DISPLAY[key] ?? raw;
+    };
+
+    const toAlertTypeKey = (type?: string): string => {
+        const raw = (type || '').trim();
+        if (!raw) return '';
+        const parts = raw.split(/\s+/);
+        if (parts.length === 2) {
+            const [a, b] = parts;
+            const aLower = a.toLowerCase();
+            const expectedDisplay = PRESET_TYPE_DISPLAY[aLower];
+            if (expectedDisplay && b.toLowerCase() === expectedDisplay.toLowerCase()) return aLower;
+        }
+        return raw.toLowerCase();
+    };
+
+    useEffect(() => {
+        if (!showAlertManager) return;
+        setAlertSearch('');
+        setAlertSeverityFilter('all');
+        setAlertTypeFilter('all');
+        setEditingAlertId(null);
+    }, [alertManagerTab, showAlertManager]);
     const [broadcastForm, setBroadcastForm] = useState({
         title: '',
         severity: 'low' as 'low' | 'moderate' | 'high',
-        type: 'general',
+        type: '',
         description: ''
     });
     
@@ -154,11 +240,14 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
 
         const handleOnline = () => setIsOfflineMode(false);
         const handleOffline = () => setIsOfflineMode(true);
+        const handleQueueSynced = () => { void loadData(); };
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
+        window.addEventListener('safesphere-offline-queue-synced', handleQueueSynced);
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
+            window.removeEventListener('safesphere-offline-queue-synced', handleQueueSynced);
         };
     }, []);
 
@@ -171,25 +260,57 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
 
     if (!user) return <div className="p-8 text-gray-700">{t('loading')}</div>;
 
-    // Handle broadcast alert submission
-    const handleSendBroadcast = () => {
-        if (!broadcastForm.title || !broadcastForm.description) {
+    const sendBroadcastAlert = async (opts: { closeBroadcastModal: boolean; afterSendTab?: 'active' | 'resolved' }) => {
+        if (broadcastBusy) return;
+        const titleText = stripHtml(broadcastForm.title);
+        const descriptionText = stripHtml(broadcastForm.description);
+        if (!titleText || !descriptionText) {
             alert(t('fillRequiredFields'));
             return;
         }
-        
+
+        setBroadcastBusy(true);
         const newAlert: Alert = {
             id: Date.now(),
-            title: broadcastForm.title,
-            description: broadcastForm.description,
+            title: sanitizeHtmlForStorage(broadcastForm.title),
+            description: sanitizeHtmlForStorage(broadcastForm.description),
             severity: broadcastForm.severity,
-            timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-            type: broadcastForm.type as any
+            // Must be parseable by Home’s sorter (date+time), not time-only.
+            timestamp: new Date().toLocaleString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            }),
+            type: broadcastForm.type as Alert['type'],
+            archived: false,
+            resolved: false,
         };
-        
-        setAlerts([newAlert, ...alerts]);
-        setShowBroadcastForm(false);
-        setBroadcastForm({ title: '', severity: 'low', type: 'general', description: '' });
+
+        try {
+            await submitAlert(newAlert);
+            const updated = await fetchAlerts();
+            // If the backend response is stale (write not visible yet), keep optimistic UI.
+            const hasNew = updated.some((a) => a.id === newAlert.id);
+            setAlerts(hasNew ? updated : [newAlert, ...updated]);
+        } catch {
+            // UI fallback: still show it immediately even if persistence fails.
+            setAlerts((prev) => [newAlert, ...prev]);
+            alert(t('failedToSubmit'));
+        } finally {
+            setBroadcastBusy(false);
+        }
+
+        if (opts.closeBroadcastModal) setShowBroadcastForm(false);
+        setBroadcastForm({ title: '', severity: 'low', type: '', description: '' });
+        if (opts.afterSendTab) setAlertManagerTab(opts.afterSendTab);
+    };
+
+    // Handle broadcast alert submission (standalone modal trigger).
+    const handleSendBroadcast = async () => {
+        await sendBroadcastAlert({ closeBroadcastModal: true });
     };
 
     // --- Dynamic Score Calculation ---
@@ -208,7 +329,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
     const profileProgress = (profilePoints / profileMax) * 100;
 
     // 3. Drill Participation: Based on completed drills
-    const completedDrills = drills.filter(d => d.status === 'Completed').length;
+    const completedDrills = drills.filter(d => String(d.status || '').toLowerCase().startsWith('completed')).length;
     const drillMax = 20;
     const drillPoints = Math.min(completedDrills * 10, drillMax);
     const drillProgress = (drillPoints / drillMax) * 100;
@@ -415,18 +536,46 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
             timestamp: p.time ? new Date(p.time).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
             type: 'earthquake' as const
         }));
-        const merged = [...seismicAlertsList, ...alerts];
+        // Only show "truly active" broadcast alerts in Active Alerts.
+        const activeBroadcastAlerts = alerts.filter((a) => !a.archived && !a.resolved);
+        const merged = [...seismicAlertsList, ...activeBroadcastAlerts];
         return merged.sort((a, b) => {
             const tA = a.timestamp && /^\d/.test(a.timestamp) ? Date.parse(a.timestamp) : (a.id >= 90000 ? 1e15 : 0);
             const tB = b.timestamp && /^\d/.test(b.timestamp) ? Date.parse(b.timestamp) : (b.id >= 90000 ? 1e15 : 0);
             if (!Number.isNaN(tA) && !Number.isNaN(tB)) return tB - tA;
-            if (a.type === 'earthquake' && b.type !== 'earthquake') return -1;
-            if (b.type === 'earthquake' && a.type !== 'earthquake') return 1;
+            const aType = toAlertTypeKey(a.type);
+            const bType = toAlertTypeKey(b.type);
+            if (aType === 'earthquake' && bType !== 'earthquake') return -1;
+            if (bType === 'earthquake' && aType !== 'earthquake') return 1;
             if (!Number.isNaN(tA)) return -1;
             if (!Number.isNaN(tB)) return 1;
             return b.id - a.id;
         });
     }, [seismicWaveData, alerts]);
+
+    const alertsForManagerTab = useMemo(() => {
+        if (alertManagerTab === 'broadcast') return [];
+        if (alertManagerTab === 'active') return alerts.filter((a) => !a.archived && !a.resolved);
+        if (alertManagerTab === 'resolved') return alerts.filter((a) => !a.archived && !!a.resolved);
+        // 'archived'
+        return alerts.filter((a) => !!a.archived);
+    }, [alerts, alertManagerTab]);
+
+    const filteredAlertsForManager = useMemo(() => {
+        const q = alertSearch.trim().toLowerCase();
+        return alertsForManagerTab.filter((a) => {
+            const titleText = stripHtml(a.title).toLowerCase();
+            const descriptionText = stripHtml(a.description).toLowerCase();
+            const matchesSearch = !q
+                || titleText.includes(q)
+                || descriptionText.includes(q)
+                || String(a.id).includes(q);
+            const matchesSeverity = alertSeverityFilter === 'all' || a.severity === alertSeverityFilter;
+            const filterType = alertTypeFilter === 'all' ? 'all' : alertTypeFilter.toLowerCase();
+            const matchesType = filterType === 'all' || toAlertTypeKey(a.type) === filterType;
+            return matchesSearch && matchesSeverity && matchesType;
+        });
+    }, [alertsForManagerTab, alertSearch, alertSeverityFilter, alertTypeFilter]);
 
     return (
         <div className="home-page-content flex flex-col space-y-6 sm:space-y-7 md:space-y-8 lg:space-y-10 pb-24 p-4 sm:p-5 md:p-6 lg:p-8 xl:p-10 relative min-h-screen w-full max-w-4xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto">
@@ -558,42 +707,51 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                             </span>
                         )}
                     </h2>
-                    {user?.role === 'Admin' && (
-                        <button 
-                            onClick={() => setShowBroadcastForm(true)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors shadow-sm"
+                    {canBroadcastAlerts(user) && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAlertManagerTab('active');
+                                setShowAlertManager(true);
+                            }}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-200 text-gray-800 text-xs font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                            title="Manage Alerts"
+                            aria-label="Manage Alerts"
                         >
-                            <Icons.Plus size={14} />
-                            {t('broadcast')}
+                            <Icons.Edit size={14} />
+                            Manage Alerts
                         </button>
                     )}
                 </div>
                 <div className="space-y-3 md:space-y-4">
-                    {sortedAlerts.slice(0, 3).map(alert => (
-                        <div key={alert.id} className={`bg-white p-4 md:p-5 lg:p-6 rounded-xl md:rounded-2xl shadow-sm border border-gray-100 flex gap-4 border-l-4 ${
-                            alert.type === 'earthquake' ? 'border-l-amber-600' :
-                            alert.type === 'tsunami' ? 'border-l-cyan-600' :
-                            alert.type === 'volcano' ? 'border-l-red-700' :
-                            alert.type === 'hurricane' ? 'border-l-violet-600' :
-                            alert.type === 'storm' ? 'border-l-indigo-500' :
-                            alert.type === 'flood' ? 'border-l-blue-500' :
-                            alert.type === 'fire' ? 'border-l-orange-600' :
-                            alert.severity === 'high' ? 'border-l-red-500' : 'border-l-orange-500'
-                        }`}>
+                    {sortedAlerts.slice(0, showMoreActiveAlerts ? 6 : 3).map((alert) => (
+                        <div
+                            key={alert.id}
+                            className={`bg-white p-4 md:p-5 lg:p-6 rounded-xl md:rounded-2xl shadow-sm border border-gray-100 flex gap-4 border-l-4 ${
+                                toAlertTypeKey(alert.type) === 'earthquake' ? 'border-l-amber-600' :
+                                toAlertTypeKey(alert.type) === 'tsunami' ? 'border-l-cyan-600' :
+                                toAlertTypeKey(alert.type) === 'volcano' ? 'border-l-red-700' :
+                                toAlertTypeKey(alert.type) === 'hurricane' ? 'border-l-violet-600' :
+                                toAlertTypeKey(alert.type) === 'storm' ? 'border-l-indigo-500' :
+                                toAlertTypeKey(alert.type) === 'flood' ? 'border-l-blue-500' :
+                                toAlertTypeKey(alert.type) === 'fire' ? 'border-l-orange-600' :
+                                alert.severity === 'high' ? 'border-l-red-500' : 'border-l-orange-500'
+                            }`}
+                        >
                             <div className="shrink-0 mt-1">
-                                {alert.type === 'earthquake' ? (
+                                {toAlertTypeKey(alert.type) === 'earthquake' ? (
                                     <Icons.AlertTriangle className="text-amber-600" />
-                                ) : alert.type === 'tsunami' ? (
+                                ) : toAlertTypeKey(alert.type) === 'tsunami' ? (
                                     <Icons.AlertTriangle className="text-cyan-600" />
-                                ) : alert.type === 'volcano' ? (
+                                ) : toAlertTypeKey(alert.type) === 'volcano' ? (
                                     <Icons.AlertTriangle className="text-red-700" />
-                                ) : alert.type === 'hurricane' ? (
+                                ) : toAlertTypeKey(alert.type) === 'hurricane' ? (
                                     <Icons.AlertTriangle className="text-violet-600" />
-                                ) : alert.type === 'storm' ? (
+                                ) : toAlertTypeKey(alert.type) === 'storm' ? (
                                     <Icons.AlertTriangle className="text-indigo-500" />
-                                ) : alert.type === 'flood' ? (
+                                ) : toAlertTypeKey(alert.type) === 'flood' ? (
                                     <Icons.AlertTriangle className="text-blue-500" />
-                                ) : alert.type === 'fire' ? (
+                                ) : toAlertTypeKey(alert.type) === 'fire' ? (
                                     <Icons.Emergency className="text-orange-600" />
                                 ) : (
                                     <Icons.Emergency className={alert.severity === 'high' ? 'text-red-500' : 'text-orange-500'} />
@@ -601,31 +759,56 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                             </div>
                             <div className="flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <h3 className="font-bold text-sm">{translateAlertTitle(alert.title)}</h3>
-                                    {alert.type === 'earthquake' && (
+                                    <h3 className="font-bold text-sm">
+                                        {richTextLooksLikeHtml(alert.title) ? (
+                                            <span dangerouslySetInnerHTML={{ __html: sanitizeHtmlForStorage(alert.title) }} />
+                                        ) : (
+                                            translateAlertTitle(alert.title)
+                                        )}
+                                    </h3>
+                                    {toAlertTypeKey(alert.type) === 'earthquake' && (
                                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] sm:text-xs font-bold">{t('seismicBadge')}</span>
                                     )}
-                                    {alert.type === 'tsunami' && (
+                                    {toAlertTypeKey(alert.type) === 'tsunami' && (
                                         <span className="px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 text-[11px] sm:text-xs font-bold">{t('tsunami')}</span>
                                     )}
-                                    {alert.type === 'volcano' && (
+                                    {toAlertTypeKey(alert.type) === 'volcano' && (
                                         <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] sm:text-xs font-bold">{t('volcanicBadge')}</span>
                                     )}
-                                    {alert.type === 'hurricane' && (
+                                    {toAlertTypeKey(alert.type) === 'hurricane' && (
                                         <span className="px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[11px] sm:text-xs font-bold">{t('hurricane')}</span>
                                     )}
-                                    {alert.type === 'storm' && (
+                                    {toAlertTypeKey(alert.type) === 'storm' && (
                                         <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[11px] sm:text-xs font-bold">{t('storm')}</span>
                                     )}
                                     <span className="text-xs text-gray-400 ml-auto">{alert.timestamp}</span>
                                 </div>
-                                <p className="text-sm text-gray-600 mt-1">{translateDescription(alert.description)}</p>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    {richTextLooksLikeHtml(alert.description) ? (
+                                        <span dangerouslySetInnerHTML={{ __html: sanitizeHtmlForStorage(alert.description) }} />
+                                    ) : (
+                                        translateDescription(alert.description)
+                                    )}
+                                </p>
                             </div>
                         </div>
                     ))}
                     {sortedAlerts.length === 0 && <div className="text-gray-500 text-sm">{t('noActiveAlerts')}</div>}
                 </div>
             </div>
+
+            {sortedAlerts.length > 3 && (
+                <div className="flex justify-end mt-2">
+                    <button
+                        type="button"
+                        onClick={() => setShowMoreActiveAlerts((v) => !v)}
+                        className="px-3 py-2 bg-white border border-gray-200 text-gray-800 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors shadow-sm"
+                        aria-label={showMoreActiveAlerts ? 'Minimise' : 'View More'}
+                    >
+                        {showMoreActiveAlerts ? 'Minimise' : 'View More'}
+                    </button>
+                </div>
+            )}
 
             {/* Quick Actions - Report Incident & View Score Breakdown */}
             <div className="grid grid-cols-2 gap-4 md:gap-6 lg:gap-8">
@@ -776,7 +959,8 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                         const sevLabel = getSeverityLabel(magVal);
                                         const sevRange = getSeverityRange(magVal);
                                         return (
-                                            <g key={magVal} title={`${sevLabel} (${sevRange})`}>
+                                            <g key={magVal}>
+                                                <title>{`${sevLabel} (${sevRange})`}</title>
                                                 <line x1={chartLeft} y1={y} x2={chartRight} y2={y} stroke="rgba(148,163,184,0.25)" strokeWidth="0.4" />
                                                 <text x={chartLeft - 6} y={y + 3} textAnchor="end" fill="#475569" fontSize="9" fontWeight="600">{magVal.toFixed(1)}M</text>
                                             </g>
@@ -842,7 +1026,13 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                     <div className="bg-slate-800 backdrop-blur-xl rounded-2xl w-full max-w-sm sm:max-w-md p-6 overflow-y-auto max-h-[90vh] shadow-2xl">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-bold text-white">{t('scoreBreakdown')}</h2>
-                            <button onClick={() => setShowScoreDetails(false)} className="text-slate-400 hover:text-white transition-colors">
+                            <button
+                                type="button"
+                                onClick={() => setShowScoreDetails(false)}
+                                title={t('close')}
+                                aria-label={t('close')}
+                                className="text-slate-400 hover:text-white transition-colors"
+                            >
                                 <Icons.X size={24} />
                             </button>
                         </div>
@@ -947,6 +1137,464 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                 </div>
             )}
 
+            {/* Alerts Manager Modal */}
+            {showAlertManager && (
+                <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl overflow-hidden">
+                        <div className="flex items-center justify-between mb-5">
+                            <div className="flex items-center gap-2">
+                                <Icons.Bell size={22} className="text-red-500" />
+                                <h2 className="text-xl font-bold">Manage Alerts</h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setEditingAlertId(null);
+                                    setShowAlertManager(false);
+                                }}
+                                title={t('close')}
+                                aria-label={t('close')}
+                                className="text-gray-400 hover:text-black transition-colors"
+                            >
+                                <Icons.X size={22} />
+                            </button>
+                        </div>
+
+                        <div className="flex gap-2 mb-4 flex-wrap">
+                            <button
+                                type="button"
+                                onClick={() => { setAlertManagerTab('broadcast'); setEditingAlertId(null); }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                                    alertManagerTab === 'broadcast'
+                                        ? 'bg-red-500 text-white border-red-500'
+                                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                                + Broadcast
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setAlertManagerTab('active'); setEditingAlertId(null); }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                                    alertManagerTab === 'active'
+                                        ? 'bg-red-500 text-white border-red-500'
+                                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                                Active
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setAlertManagerTab('resolved'); setEditingAlertId(null); }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                                    alertManagerTab === 'resolved'
+                                        ? 'bg-red-500 text-white border-red-500'
+                                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                                Complete
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setAlertManagerTab('archived'); setEditingAlertId(null); }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                                    alertManagerTab === 'archived'
+                                        ? 'bg-red-500 text-white border-red-500'
+                                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                                Archived
+                            </button>
+                        </div>
+
+                        {alertManagerTab === 'broadcast' ? (
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="manage-alert-title" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                        {t('alertTitle')}
+                                    </label>
+                                    <RichTextEditor
+                                        value={broadcastForm.title}
+                                        onChange={(html) => setBroadcastForm((p) => ({ ...p, title: html }))}
+                                        placeholder={t('alertTitlePlaceholder')}
+                                        variant="title"
+                                        disabled={broadcastBusy}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="manage-alert-severity" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                            {t('severity')}
+                                        </label>
+                                        <select
+                                            id="manage-alert-severity"
+                                            value={broadcastForm.severity}
+                                            onChange={(e) => setBroadcastForm({ ...broadcastForm, severity: e.target.value as any })}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors"
+                                        >
+                                            <option value="low">{t('low')}</option>
+                                            <option value="moderate">{t('moderate')}</option>
+                                            <option value="high">{t('high')}</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="manage-alert-type" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                            {t('type')}
+                                        </label>
+                                        <input
+                                            id="manage-alert-type"
+                                            value={broadcastForm.type}
+                                            onChange={(e) => setBroadcastForm({ ...broadcastForm, type: e.target.value })}
+                                            onBlur={() => {
+                                                setBroadcastForm((p) => {
+                                                    const key = toAlertTypeKey(p.type);
+                                                    const display = PRESET_TYPE_DISPLAY[key];
+                                                    return display ? { ...p, type: display } : p;
+                                                });
+                                            }}
+                                            list="alert-type-presets-manage"
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors"
+                                            placeholder=""
+                                            aria-label={t('type')}
+                                        />
+                                        <datalist id="alert-type-presets-manage">
+                                            <option value="General" />
+                                            <option value="Flood" />
+                                            <option value="Fire" />
+                                            <option value="Earthquake" />
+                                            <option value="Tsunami" />
+                                            <option value="Volcano" />
+                                            <option value="Hurricane" />
+                                            <option value="Storm" />
+                                        </datalist>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="manage-alert-description" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                        {t('description')}
+                                    </label>
+                                    <RichTextEditor
+                                        value={broadcastForm.description}
+                                        onChange={(html) => setBroadcastForm((p) => ({ ...p, description: html }))}
+                                        placeholder={t('descriptionPlaceholder')}
+                                        variant="description"
+                                        disabled={broadcastBusy}
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => sendBroadcastAlert({ closeBroadcastModal: false, afterSendTab: 'active' })}
+                                    disabled={broadcastBusy}
+                                    className="w-full py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-colors shadow-lg mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    {broadcastBusy ? t('broadcastingSignal') : t('sendAlert')}
+                                </button>
+                            </div>
+                        ) : editingAlertId != null ? (
+                            (() => {
+                                const editingAlert = alerts.find((a) => a.id === editingAlertId);
+                                if (!editingAlert) return null;
+                                return (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label htmlFor="alert-edit-title" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                                {t('alertTitle')}
+                                            </label>
+                                            <RichTextEditor
+                                                value={alertEditorForm.title}
+                                                onChange={(html) => setAlertEditorForm((p) => ({ ...p, title: html }))}
+                                                placeholder={t('alertTitlePlaceholder')}
+                                                variant="title"
+                                                disabled={alertEditorBusy}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label htmlFor="alert-edit-severity" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                                    {t('severity')}
+                                                </label>
+                                                <select
+                                                    id="alert-edit-severity"
+                                                    value={alertEditorForm.severity}
+                                                    onChange={(e) => setAlertEditorForm((p) => ({ ...p, severity: e.target.value as any }))}
+                                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors"
+                                                >
+                                                    <option value="low">{t('low')}</option>
+                                                    <option value="moderate">{t('moderate')}</option>
+                                                    <option value="high">{t('high')}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label htmlFor="alert-edit-type" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                                    {t('type')}
+                                                </label>
+                                                <input
+                                                    id="alert-edit-type"
+                                                    value={alertEditorForm.type}
+                                                    onChange={(e) => setAlertEditorForm((p) => ({ ...p, type: e.target.value }))}
+                                                    onBlur={() => {
+                                                        setAlertEditorForm((p) => {
+                                                            const key = toAlertTypeKey(p.type);
+                                                            const display = PRESET_TYPE_DISPLAY[key];
+                                                            return display ? { ...p, type: display } : p;
+                                                        });
+                                                    }}
+                                                    list="alert-type-presets-edit"
+                                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors"
+                                                    placeholder=""
+                                                    aria-label={t('type')}
+                                                />
+                                                <datalist id="alert-type-presets-edit">
+                                                    <option value="General" />
+                                                    <option value="Flood" />
+                                                    <option value="Fire" />
+                                                    <option value="Earthquake" />
+                                                    <option value="Tsunami" />
+                                                    <option value="Volcano" />
+                                                    <option value="Hurricane" />
+                                                    <option value="Storm" />
+                                                </datalist>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="alert-edit-description" className="block text-xs font-bold text-gray-500 uppercase mb-2">
+                                                {t('description')}
+                                            </label>
+                                            <RichTextEditor
+                                                value={alertEditorForm.description}
+                                                onChange={(html) => setAlertEditorForm((p) => ({ ...p, description: html }))}
+                                                placeholder={t('descriptionPlaceholder')}
+                                                variant="description"
+                                                disabled={alertEditorBusy}
+                                            />
+                                        </div>
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditingAlertId(null)}
+                                                className="flex-1 py-3 bg-white border border-gray-200 text-gray-800 rounded-xl font-bold hover:bg-gray-50 transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={alertEditorBusy}
+                                                onClick={async () => {
+                                                    setAlertEditorBusy(true);
+                                                    try {
+                                                        await updateAlert(editingAlertId, {
+                                                            title: alertEditorForm.title,
+                                                            description: alertEditorForm.description,
+                                                            severity: alertEditorForm.severity,
+                                                            type: alertEditorForm.type,
+                                                            timestamp: editingAlert.timestamp,
+                                                        });
+                                                        const updated = await fetchAlerts();
+                                                        setAlerts(updated);
+                                                        setEditingAlertId(null);
+                                                    } finally {
+                                                        setAlertEditorBusy(false);
+                                                    }
+                                                }}
+                                                className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                                            >
+                                                {alertEditorBusy ? t('broadcastingSignal') : t('sendAlert')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })()
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div className="relative">
+                                            <Icons.Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                            <input
+                                                type="text"
+                                                aria-label="Search alerts"
+                                                value={alertSearch}
+                                                onChange={(e) => setAlertSearch(e.target.value)}
+                                                placeholder="Search by title, description, or ID…"
+                                                className="w-full pl-10 pr-3 py-2.5 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-gray-400"
+                                            />
+                                        </div>
+                                        <div>
+                                            <select
+                                                value={alertSeverityFilter}
+                                                aria-label={t('severity')}
+                                                onChange={(e) => setAlertSeverityFilter(e.target.value as any)}
+                                                className="w-full py-2.5 px-3 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-gray-400"
+                                            >
+                                                <option value="all">Any severity</option>
+                                                <option value="low">{t('low')}</option>
+                                                <option value="moderate">{t('moderate')}</option>
+                                                <option value="high">{t('high')}</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <select
+                                                value={alertTypeFilter}
+                                                aria-label={t('type')}
+                                                onChange={(e) => setAlertTypeFilter(e.target.value as any)}
+                                                className="w-full py-2.5 px-3 rounded-lg border border-gray-200 bg-white focus:outline-none focus:border-gray-400"
+                                            >
+                                                <option value="all">Any type</option>
+                                                <option value=""></option>
+                                                <option value="general">{t('general')}</option>
+                                                <option value="flood">{t('flood')}</option>
+                                                <option value="fire">{t('fire')}</option>
+                                                <option value="earthquake">{t('earthquake')}</option>
+                                                <option value="tsunami">{t('tsunami')}</option>
+                                                <option value="volcano">{t('volcano')}</option>
+                                                <option value="hurricane">{t('hurricane')}</option>
+                                                <option value="storm">{t('storm')}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end mt-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setAlertSearch('');
+                                                setAlertSeverityFilter('all');
+                                                setAlertTypeFilter('all');
+                                            }}
+                                            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-800 hover:bg-gray-50 transition-colors"
+                                        >
+                                            Clear filters
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                                    {filteredAlertsForManager.length === 0 ? (
+                                        <div className="text-gray-500 text-sm">No alerts found.</div>
+                                    ) : (
+                                        filteredAlertsForManager.map((a) => (
+                                            <div
+                                                key={a.id}
+                                                className="bg-white border border-gray-200 rounded-xl p-4 flex gap-3 items-start"
+                                            >
+                                                <div className="flex-1 min-w-0">
+                                                <h3 className="font-bold text-sm truncate">
+                                                    {richTextLooksLikeHtml(a.title) ? (
+                                                        <span dangerouslySetInnerHTML={{ __html: sanitizeHtmlForStorage(a.title) }} />
+                                                    ) : (
+                                                        translateAlertTitle(a.title)
+                                                    )}
+                                                </h3>
+                                                <p className="text-sm text-gray-600 mt-1 line-clamp-3">
+                                                    {richTextLooksLikeHtml(a.description) ? (
+                                                        <span dangerouslySetInnerHTML={{ __html: sanitizeHtmlForStorage(a.description) }} />
+                                                    ) : (
+                                                        translateDescription(a.description)
+                                                    )}
+                                                </p>
+                                                    <div className="text-xs text-gray-400 mt-2 flex gap-2 flex-wrap">
+                                                        <span className="font-semibold">{a.severity}</span>
+                                                        <span>{toDisplayAlertType(a.type)}</span>
+                                                        <span className="ml-auto">{a.timestamp}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2 flex-col">
+                                                    {alertManagerTab === 'active' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                await updateAlert(a.id, { resolved: true, archived: false });
+                                                                setAlerts(await fetchAlerts());
+                                                            }}
+                                                            className="px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-colors"
+                                                        >
+                                                            Complete (Resolved)
+                                                        </button>
+                                                    )}
+                                                    {alertManagerTab === 'active' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                await archiveAlert(a.id, true);
+                                                                setAlerts(await fetchAlerts());
+                                                            }}
+                                                            className="px-3 py-2 bg-gray-900 text-white rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors"
+                                                        >
+                                                            Archive
+                                                        </button>
+                                                    )}
+                                                    {alertManagerTab === 'resolved' && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    await archiveAlert(a.id, true);
+                                                                    setAlerts(await fetchAlerts());
+                                                                }}
+                                                                className="px-3 py-2 bg-gray-900 text-white rounded-lg text-xs font-bold hover:bg-gray-800 transition-colors"
+                                                            >
+                                                                Archive
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    await updateAlert(a.id, { resolved: false, archived: false });
+                                                                    setAlerts(await fetchAlerts());
+                                                                }}
+                                                                className="px-3 py-2 bg-white border border-gray-200 text-gray-800 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors"
+                                                            >
+                                                                Reopen to Active
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {alertManagerTab === 'archived' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                await archiveAlert(a.id, false);
+                                                                setAlerts(await fetchAlerts());
+                                                            }}
+                                                            className="px-3 py-2 bg-white border border-gray-200 text-gray-800 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors"
+                                                        >
+                                                            Unarchive
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditingAlertId(a.id);
+                                                            setAlertEditorForm({
+                                                                title: a.title,
+                                                                severity: a.severity,
+                                                                type: toDisplayAlertType(a.type),
+                                                                description: a.description,
+                                                            });
+                                                        }}
+                                                        className="px-3 py-2 bg-white border border-gray-200 text-gray-800 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={async () => {
+                                                            if (!window.confirm(t('deleteItemConfirm'))) return;
+                                                            await deleteAlert(a.id);
+                                                            setAlerts(await fetchAlerts());
+                                                        }}
+                                                        className="px-3 py-2 bg-white border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Broadcast Alert Form Modal */}
             {showBroadcastForm && (
                 <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
@@ -956,7 +1604,13 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                 <Icons.AlertTriangle className="text-orange-500" size={24} />
                                 <h2 className="text-xl font-bold">{t('broadcastAlert')}</h2>
                             </div>
-                            <button onClick={() => setShowBroadcastForm(false)} className="text-gray-400 hover:text-black transition-colors">
+                            <button
+                                type="button"
+                                onClick={() => setShowBroadcastForm(false)}
+                                title={t('close')}
+                                aria-label={t('close')}
+                                className="text-gray-400 hover:text-black transition-colors"
+                            >
                                 <Icons.X size={24} />
                             </button>
                         </div>
@@ -964,21 +1618,22 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                         <div className="space-y-4">
                             {/* Alert Title */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('alertTitle')}</label>
-                                <input 
-                                    type="text" 
+                                <label htmlFor="broadcast-alert-title" className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('alertTitle')}</label>
+                                <RichTextEditor
                                     value={broadcastForm.title}
-                                    onChange={(e) => setBroadcastForm({ ...broadcastForm, title: e.target.value })}
+                                    onChange={(html) => setBroadcastForm((p) => ({ ...p, title: html }))}
                                     placeholder={t('alertTitlePlaceholder')}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors"
+                                    variant="title"
+                                    disabled={broadcastBusy}
                                 />
                             </div>
 
                             {/* Severity and Type */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('severity')}</label>
+                                    <label htmlFor="broadcast-alert-severity" className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('severity')}</label>
                                     <select 
+                                        id="broadcast-alert-severity"
                                         value={broadcastForm.severity}
                                         onChange={(e) => setBroadcastForm({ ...broadcastForm, severity: e.target.value as any })}
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors"
@@ -989,42 +1644,56 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSystemStatus }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('type')}</label>
-                                    <select 
+                                    <label htmlFor="broadcast-alert-type" className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('type')}</label>
+                                    <input
+                                        id="broadcast-alert-type"
                                         value={broadcastForm.type}
                                         onChange={(e) => setBroadcastForm({ ...broadcastForm, type: e.target.value })}
+                                        onBlur={() => {
+                                            setBroadcastForm((p) => {
+                                                const key = toAlertTypeKey(p.type);
+                                                const display = PRESET_TYPE_DISPLAY[key];
+                                                return display ? { ...p, type: display } : p;
+                                            });
+                                        }}
+                                        list="alert-type-presets-broadcast"
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors"
-                                    >
-                                        <option value="general">{t('general')}</option>
-                                        <option value="flood">{t('flood')}</option>
-                                        <option value="fire">{t('fire')}</option>
-                                        <option value="earthquake">{t('earthquake')}</option>
-                                        <option value="tsunami">{t('tsunami')}</option>
-                                        <option value="volcano">{t('volcano')}</option>
-                                        <option value="hurricane">{t('hurricane')}</option>
-                                        <option value="storm">{t('storm')}</option>
-                                    </select>
+                                        placeholder=""
+                                        aria-label={t('type')}
+                                    />
+                                    <datalist id="alert-type-presets-broadcast">
+                                        <option value="General" />
+                                        <option value="Flood" />
+                                        <option value="Fire" />
+                                        <option value="Earthquake" />
+                                        <option value="Tsunami" />
+                                        <option value="Volcano" />
+                                        <option value="Hurricane" />
+                                        <option value="Storm" />
+                                    </datalist>
                                 </div>
                             </div>
 
                             {/* Description */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('description')}</label>
-                                <textarea 
+                                <label htmlFor="broadcast-alert-description" className="block text-xs font-bold text-gray-500 uppercase mb-2">{t('description')}</label>
+                                <RichTextEditor
                                     value={broadcastForm.description}
-                                    onChange={(e) => setBroadcastForm({ ...broadcastForm, description: e.target.value })}
+                                    onChange={(html) => setBroadcastForm((p) => ({ ...p, description: html }))}
                                     placeholder={t('descriptionPlaceholder')}
-                                    rows={4}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:outline-none focus:border-gray-400 transition-colors resize-none"
+                                    variant="description"
+                                    disabled={broadcastBusy}
                                 />
                             </div>
 
                             {/* Send Alert Button */}
                             <button
                                 onClick={handleSendBroadcast}
-                                className="w-full py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-colors shadow-lg mt-2"
+                                type="button"
+                                disabled={broadcastBusy}
+                                className="w-full py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-colors shadow-lg mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
                             >
-                                {t('sendAlert')}
+                                {broadcastBusy ? t('broadcastingSignal') : t('sendAlert')}
                             </button>
                         </div>
                     </div>

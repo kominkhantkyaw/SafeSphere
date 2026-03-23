@@ -8,8 +8,8 @@ import { escapeHtml } from '../services/crypto';
 declare global {
   interface Window {
     L: any;
-    handleMapAction: (type: string, id: number) => void;
-    updateCallSign: (userId: number, value: string) => void;
+    handleMapAction: (type: string, id: string | number) => void;
+    updateCallSign: (userId: string | number, value: string) => void;
   }
 }
 
@@ -146,7 +146,7 @@ const Maps: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<IncidentReport | Resource | null>(null);
 
     // Ref to track responder markers separately to avoid full re-render flickering
-    const responderMarkersMap = useRef<Map<number, any>>(new Map());
+    const responderMarkersMap = useRef<Map<string, any>>(new Map());
 
     // Initial Data Fetch
     useEffect(() => {
@@ -174,7 +174,7 @@ const Maps: React.FC = () => {
         // Global handler for popup buttons
         window.handleMapAction = (type, id) => {
             if (type === 'report') {
-                const item = reports.find(r => r.id === id);
+                const item = reports.find(r => String(r.id) === String(id));
                 if (item) setSelectedItem(item);
             } else if (type === 'resource') {
                 const item = resources.find(r => r.id === id);
@@ -183,10 +183,11 @@ const Maps: React.FC = () => {
         };
 
         // Handler for call sign update
-        window.updateCallSign = (userId: number, value: string) => {
+        window.updateCallSign = (userId: string | number, value: string) => {
              // Optimistic Update
-             setResponders(prev => prev.map(u => u.id === userId ? { ...u, callSign: value } : u));
-             saveUser({ id: userId, callSign: value });
+             const uid = String(userId);
+             setResponders(prev => prev.map(u => String(u.id) === uid ? { ...u, callSign: value } : u));
+             saveUser({ id: uid, callSign: value } as Partial<User>);
         };
 
         return () => {
@@ -832,10 +833,11 @@ const Maps: React.FC = () => {
             const lat = (u as any).lat;
             const lng = (u as any).lng;
             if (!lat || !lng) return;
+            const uid = String(u.id);
             
             // Check if marker exists
-            if (responderMarkersMap.current.has(u.id)) {
-                const existingMarker = responderMarkersMap.current.get(u.id);
+            if (responderMarkersMap.current.has(uid)) {
+                const existingMarker = responderMarkersMap.current.get(uid);
                 existingMarker.setLatLng([lat, lng]);
             } else {
                 // Create new marker
@@ -869,7 +871,7 @@ const Maps: React.FC = () => {
                             <input 
                                 type="text" 
                                 value="${escapeHtml(callSign)}" 
-                                onblur="window.updateCallSign(${Number(u.id)}, this.value)"
+                                onblur="window.updateCallSign(${JSON.stringify(String(u.id))}, this.value)"
                                 placeholder="Set Call Sign"
                                 style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; background:#f9fafb;"
                             />
@@ -887,13 +889,13 @@ const Maps: React.FC = () => {
                     .bindTooltip(u.name, { direction: 'top', offset: [0, -20] })
                     .bindPopup(popupContent);
                 
-                responderMarkersMap.current.set(u.id, marker);
+                responderMarkersMap.current.set(uid, marker);
             }
         });
 
         // Cleanup removed responders
         responderMarkersMap.current.forEach((marker, id) => {
-            if (!responders.find(u => u.id === id)) {
+            if (!responders.find(u => String(u.id) === id)) {
                 mapInstance.current.removeLayer(marker);
                 responderMarkersMap.current.delete(id);
             }

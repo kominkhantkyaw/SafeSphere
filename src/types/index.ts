@@ -1,7 +1,7 @@
 
 
 export interface User {
-    id: number;
+    id: string;  // UUID string format (e.g., '550e8400-e29b-41d4-a716-446655440000')
     name: string;
     role: 'Admin' | 'Responder' | 'Reporter';
     safetyScore: number;
@@ -40,7 +40,12 @@ export interface Alert {
     description: string;
     severity: 'high' | 'moderate' | 'low';
     timestamp: string;
-    type: 'flood' | 'heat' | 'fire' | 'earthquake' | 'general' | 'tsunami' | 'volcano' | 'hurricane' | 'storm';
+    /** Alert type can be preset values or fully custom (e.g. "Building Collapse"). */
+    type: string;
+    /** When true, the alert is hidden from "Active Alerts" but kept in history/management. */
+    archived?: boolean;
+    /** When true, the alert is marked as completed/resolved (moved to history/management). */
+    resolved?: boolean;
 }
 
 export interface Resource {
@@ -56,6 +61,8 @@ export interface Resource {
     occupancy?: number;
     operatingHours?: string;
     notes?: string;
+    /** Optional access or delivery notes shown on map detail */
+    specialInstructions?: string;
     contactPerson?: string;
     contactPhone?: string;
     urgency?: 'Low' | 'Medium' | 'High' | 'Critical';
@@ -73,7 +80,8 @@ export interface Comment {
 }
 
 export interface IncidentReport {
-    id: number;
+    /** Client-generated UUID for online sync; demo mode uses numeric strings (e.g. "0", "101"). */
+    id: string;
     // Core Info
     type: string; // Hazard Type
     urgency?: 'Low' | 'Medium' | 'High' | 'Critical';
@@ -96,9 +104,21 @@ export interface IncidentReport {
     // Location & Status
     lat: number;
     lng: number;
-    status: 'pending' | 'active' | 'resolved' | 'approved' | 'info_requested';
+    /** gps = coordinates from map / device; site_only = submitted without GPS (saves data / offline-friendly). */
+    locationSource?: 'gps' | 'site_only';
+    /** delayed = triage “wait”; rejected = invalid/duplicate (see Report_UI_Layout.md) */
+    status:
+        | 'pending'
+        | 'active'
+        | 'resolved'
+        | 'approved'
+        | 'info_requested'
+        | 'delayed'
+        | 'rejected'
+        | 'en_route'
+        | 'on_scene';
     timestamp: string;
-    reporterId?: number;
+    reporterId?: string;  // UUID string format (references users.id)
     
     // Admin Feedback
     adminNotes?: string;
@@ -113,6 +133,7 @@ export interface IncidentReport {
 export interface ChecklistItem {
     id: number;
     title: string;
+    description?: string;
     xp: number;
     completed: boolean;
 }
@@ -138,15 +159,52 @@ export interface InjuryCase {
     timestamp: string;
 }
 
+/** Event type for calendar display: Session (drill/course), Appointment, Deadline */
+export type DrillEventType = 'session' | 'appointment' | 'deadline' | (string & {});
+
+/** A selectable session slot (date + time) for drills with multiple options */
+export interface DrillSlot {
+    date: string; // YYYY-MM-DD
+    time: string; // HH:mm
+}
+
 export interface DrillSession {
     id: number;
     title: string;
     date: string;
-    type: 'Fire' | 'Evacuation' | 'Lockdown';
-    status: 'Upcoming' | 'Completed';
+    time?: string; // e.g. "14:00" or "2:00 PM"
+    type: 'Fire' | 'Evacuation' | 'Lockdown' | (string & {});
+    status: 'Upcoming' | 'Progress' | 'Completed' | 'Cancel' | 'Happening' | 'Cancelled' | (string & {});
+    eventType?: DrillEventType; // session, appointment, deadline (or custom)
+    /** Multiple session slots - user picks one when registering */
+    slots?: DrillSlot[];
     participants?: number;
     notes?: string;
 }
+
+/** Comment on a drill session/course (social feature) */
+export interface DrillComment {
+    id: string;
+    drillId: number;
+    userId: string;
+    userName: string;
+    content: string;
+    createdAt: string; // ISO string
+    updatedAt?: string; // ISO string, when edited
+}
+
+/** Facebook-style reaction types */
+export type DrillReaction = 'like' | 'love' | 'smile' | 'laugh' | 'sad' | 'cry';
+
+/** Reaction config for UI */
+export const DRILL_REACTIONS: { type: DrillReaction; emoji: string; label: string }[] = [
+    { type: 'like', emoji: '👍', label: 'Like' },
+    { type: 'love', emoji: '❤️', label: 'Love' },
+    { type: 'smile', emoji: '😊', label: 'Smile' },
+    { type: 'laugh', emoji: '😂', label: 'Haha' },
+    { type: 'sad', emoji: '😢', label: 'Sad' },
+    { type: 'cry', emoji: '😭', label: 'Care' },
+];
 
 export interface Tutorial {
     id: number;

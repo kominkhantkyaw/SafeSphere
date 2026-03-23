@@ -27,5 +27,7 @@ ALTER TABLE public.webauthn_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.webauthn_challenges ENABLE ROW LEVEL SECURITY;
 
 -- Policy: no direct client access; Edge Function uses service_role
+DROP POLICY IF EXISTS "Service role only" ON public.webauthn_credentials;
+DROP POLICY IF EXISTS "Service role only" ON public.webauthn_challenges;
 CREATE POLICY "Service role only" ON public.webauthn_credentials FOR ALL USING (false);
 CREATE POLICY "Service role only" ON public.webauthn_challenges FOR ALL USING (false);

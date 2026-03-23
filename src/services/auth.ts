@@ -22,7 +22,8 @@ function supabaseUserToAppUser(sbUser: { id: string; email?: string; user_metada
     const meta = sbUser.user_metadata || {};
     const name = (meta.name as string) || sbUser.email?.split('@')[0] || 'User';
     const role = (meta.role as User['role']) || 'Reporter';
-    const id = hashUuidToNumber(sbUser.id);
+    /** Use Auth user id (UUID) end-to-end so reporterId / RLS / History align with Supabase. */
+    const id = sbUser.id;
     return {
         id,
         name,
@@ -40,19 +41,20 @@ function supabaseUserToAppUser(sbUser: { id: string; email?: string; user_metada
     };
 }
 
-function hashUuidToNumber(uuid: string): number {
-    const hex = uuid.replace(/-/g, '');
-    let n = 0;
-    for (let i = 0; i < Math.min(8, hex.length); i++) {
-        n = ((n << 5) - n) + hex.charCodeAt(i) | 0;
-    }
-    return Math.abs(n) || 1;
-}
-
 export type AuthResult =
     | { success: true; user: User }
     | { success: true; user: User; requiresMfa: true }
     | { success: false; message: string };
+
+/**
+ * Base URL for Supabase Auth email actions (confirm sign-up, magic links).
+ * Must be listed under Authentication → URL Configuration → Redirect URLs.
+ */
+export function getAuthEmailActionRedirectUrl(): string | undefined {
+    if (typeof window === 'undefined') return undefined;
+    const origin = window.location.origin.replace(/\/$/, '');
+    return `${origin}/`;
+}
 
 /**
  * Sign up a new real user with Supabase Auth.
@@ -63,7 +65,8 @@ export type AuthResult =
 export async function signUpWithSupabase(
     email: string,
     password: string,
-    metadata?: { name?: string; role?: User['role']; phone?: string }
+    metadata?: { name?: string; role?: User['role']; phone?: string },
+    captchaToken?: string | null
 ): Promise<
     | { success: true; user: User; needsEmailConfirmation: boolean }
     | { success: false; message: string }
@@ -71,15 +74,19 @@ export async function signUpWithSupabase(
     if (!supabase || !isSupabaseReady()) {
         return { success: false, message: 'Supabase is not configured.' };
     }
+    const emailRedirectTo = getAuthEmailActionRedirectUrl();
+    const token = captchaToken?.trim() || undefined;
     const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
+            emailRedirectTo,
             data: {
                 name: metadata?.name ?? email.trim().split('@')[0],
                 role: metadata?.role ?? 'Reporter',
                 phone: metadata?.phone ?? undefined,
             },
+            ...(token ? { captchaToken: token } : {}),
         },
     });
     if (error) return { success: false, message: error.message };
@@ -127,15 +134,62 @@ export async function verifyEmailOtp(
  * Resend the sign-up confirmation email for a user who hasn't confirmed yet.
  */
 export async function resendSignUpConfirmation(
-    email: string
+    email: string,
+    captchaToken?: string | null
 ): Promise<{ success: boolean; message?: string }> {
     if (!supabase || !isSupabaseReady()) {
         return { success: false, message: 'Supabase is not configured.' };
     }
-    const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: email.trim(),
+    const emailRedirectTo = getAuthEmailActionRedirectUrl();
+    const cap = captchaToken?.trim() || undefined;
+    const options =
+        emailRedirectTo || cap
+            ? {
+                  ...(emailRedirectTo ? { emailRedirectTo } : {}),
+                  ...(cap ? { captchaToken: cap } : {}),
+              }
+            : undefined;
+    const { error } = await supabase.auth.resend(
+        options
+            ? { type: 'signup', email: email.trim(), options }
+            : { type: 'signup', email: email.trim() }
+    );
+    if (error) return { success: false, message: error.message };
+    return { success: true };
+}
+
+/**
+ * Supabase password recovery email (magic link). Configure redirect URLs in
+ * Dashboard → Authentication → URL Configuration. Custom SMTP (e.g. Resend) is set under Auth → Emails.
+ */
+export async function sendPasswordResetEmail(
+    email: string,
+    captchaToken?: string | null
+): Promise<{ success: boolean; message?: string }> {
+    if (!supabase || !isSupabaseReady()) {
+        return { success: false, message: 'Supabase is not configured.' };
+    }
+    const redirectTo = getAuthEmailActionRedirectUrl();
+    const token = captchaToken?.trim() || undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo,
+        ...(token ? { captchaToken: token } : {}),
     });
+    if (error) return { success: false, message: error.message };
+    return { success: true };
+}
+
+/** Call after the user opens the password-reset link (PASSWORD_RECOVERY session). */
+export async function updateSupabaseUserPassword(
+    newPassword: string
+): Promise<{ success: boolean; message?: string }> {
+    if (!supabase || !isSupabaseReady()) {
+        return { success: false, message: 'Supabase is not configured.' };
+    }
+    if (newPassword.length < 6) {
+        return { success: false, message: 'Password must be at least 6 characters.' };
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) return { success: false, message: error.message };
     return { success: true };
 }

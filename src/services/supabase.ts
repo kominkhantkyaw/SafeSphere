@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 const isValidSupabaseUrl = (u: string) =>
   typeof u === 'string' &&
@@ -10,7 +10,9 @@ const isValidSupabaseUrl = (u: string) =>
   !u.includes('www.supabase.co');
 
 if (!url || !anonKey) {
-  console.warn('Supabase env vars missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local');
+  console.warn(
+    'Supabase env vars missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local in the project root (next to vite.config.ts), then restart the dev server (npm run dev).'
+  );
 } else if (!isValidSupabaseUrl(url)) {
   console.warn('VITE_SUPABASE_URL should be your project URL (e.g. https://xxxxx.supabase.co), not https://www.supabase.co');
 }

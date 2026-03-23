@@ -2,14 +2,22 @@
 
 
 import React, { useState, useCallback } from 'react';
+import { AuthCaptcha } from '../components/AuthCaptcha';
 import { Icons } from '../components/Icon';
 import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 import { FaceScanModal } from '../components/FaceScanModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ThemeSettings } from '../types';
-import { requestAccount, confirmAccount, getPendingRegistration, authenticate } from '../services/api';
-import { completeMfaChallenge, getSupabaseSessionUser, isDemoUser, resendSignUpConfirmation, signInWithGoogle, signInWithFacebook } from '../services/auth';
-import { isSupabaseReady } from '../services/supabase';
+import {
+    requestAccount,
+    confirmAccount,
+    getPendingRegistration,
+    authenticate,
+    resendSixDigitConfirmationEmail,
+    type SignUpEmailIssueKind,
+} from '../services/api';
+import { getAuthCaptchaConfig } from '../config/authCaptcha';
+import { completeMfaChallenge, getSupabaseSessionUser, isDemoUser, signInWithGoogle, signInWithFacebook } from '../services/auth';
 import { isWebAuthnAvailable, getWebAuthnAuthOptions, verifyWebAuthnAssertion } from '../services/webauthn';
 import { User } from '../types';
 import { COUNTRY_CODES } from '../constants';
@@ -48,7 +56,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [pendingEmail, setPendingEmail] = useState('');
     const [confirmationCode, setConfirmationCode] = useState('');
-    
+    /** Server/API message after requestAccount (may differ from static i18n when email fails). */
+    const [checkEmailDetailMessage, setCheckEmailDetailMessage] = useState('');
+    /** Operator-facing hint when Resend/Edge Function did not send the 6-digit email. */
+    const [emailDeliveryHint, setEmailDeliveryHint] = useState<string | null>(null);
+    const [signUpEmailIssueKind, setSignUpEmailIssueKind] = useState<SignUpEmailIssueKind | null>(null);
+
     // Defaults for demo — use Reporter (limited privileges) for safety
     const [email, setEmail] = useState('reporter@safesphere.app');
     const [password, setPassword] = useState('20Reporter#26!');
@@ -70,6 +83,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
 
     // Face ID: camera-based face scan (like QR Scanner)
     const [showFaceScan, setShowFaceScan] = useState(false);
+
+    // View password toggle for Sign In and Registration forms
+    const [showPassword, setShowPassword] = useState(false);
+    const [showRegPassword, setShowRegPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+    const [registerCaptchaToken, setRegisterCaptchaToken] = useState<string | null>(null);
+    const [resendCaptchaToken, setResendCaptchaToken] = useState<string | null>(null);
+    const [resendCaptchaMountKey, setResendCaptchaMountKey] = useState(0);
 
     const handleLogin = async (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -212,6 +234,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
             setRegisterError(t('usernameRequired') || 'Username is required for security (e.g. to prevent duplicate reports).');
             return;
         }
+        if (!regEmail.trim()) {
+            setRegisterError(t('emailRequired') || 'Please enter your email address.');
+            return;
+        }
         if (regPassword !== confirmPassword) {
             setRegisterError(t('passwordsDoNotMatch'));
             return;
@@ -225,6 +251,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
             setRegisterError(t('phoneRequired') || 'Please enter your phone number.');
             return;
         }
+        if (getAuthCaptchaConfig() && !registerCaptchaToken?.trim()) {
+            setRegisterError(t('captchaRequired') || 'Please complete the security check below.');
+            return;
+        }
         setLoading(true);
         const res = await requestAccount({
             firstName,
@@ -233,11 +263,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
             email: regEmail,
             phone: fullPhone,
             password: regPassword,
+            captchaToken: registerCaptchaToken ?? undefined,
         });
         setLoading(false);
         if (res.success) {
+            if (res.registrationComplete && res.registeredUser) {
+                alert(t('signInSuccess'));
+                onLogin(res.registeredUser.role, res.registeredUser);
+                return;
+            }
             setPendingEmail(regEmail);
             setConfirmationCode('');
+            setCheckEmailDetailMessage(res.message);
+            setEmailDeliveryHint(res.emailDeliveryHint ?? null);
+            setSignUpEmailIssueKind(res.signUpEmailIssueKind ?? null);
             setView('check-email');
         } else {
             setRegisterError(res.message);
@@ -282,7 +321,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                     <div className="absolute top-4 right-4">
                         <button
                             type="button"
-                            onClick={() => { setView('login'); setRegisterError(null); }}
+                            onClick={() => {
+                                setView('login');
+                                setRegisterError(null);
+                                setEmailDeliveryHint(null);
+                                setSignUpEmailIssueKind(null);
+                            }}
                             className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                             aria-label="Close and return to sign in"
                         >
@@ -378,12 +422,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     <div className="relative">
                                         <Icons.Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                         <input 
-                                            type="password" 
+                                            type={showPassword ? 'text' : 'password'} 
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors bg-white" 
+                                            className="w-full pl-10 pr-11 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors bg-white" 
                                             placeholder="••••••••" 
                                         />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                            aria-label={showPassword ? t('hidePassword') || 'Hide password' : t('showPassword') || 'Show password'}
+                                        >
+                                            {showPassword ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
+                                        </button>
                                     </div>
                                 </div>
                                 
@@ -421,9 +473,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                             <div className="space-y-4">
                                 <button
                                     type="button"
-                                    onClick={() => { setView('login'); setRegisterError(null); }}
-                                    className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
-                                >
+                            onClick={() => {
+                                setView('login');
+                                setRegisterError(null);
+                                setEmailDeliveryHint(null);
+                                setSignUpEmailIssueKind(null);
+                                setCheckEmailDetailMessage('');
+                            }}
+                            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
+                        >
                                     <Icons.ChevronLeft size={18} />
                                     {t('backToSignIn')}
                                 </button>
@@ -433,24 +491,93 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     </div>
                                 </div>
                                 <h2 className="text-lg font-bold text-gray-900 text-center">{t('checkYourEmail')}</h2>
-                                <p className="text-sm text-gray-500 text-center">
-                                    {t('confirmationCodeSentEmailAndSms')}
+                                <p className="text-sm text-gray-600 text-center">
+                                    {checkEmailDetailMessage || t('confirmationCodeSentEmailAndSms')}
                                 </p>
+                                {emailDeliveryHint && (
+                                    <div
+                                        className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5"
+                                        role="status"
+                                    >
+                                        <p className="font-bold">
+                                            {signUpEmailIssueKind === 'captcha' ||
+                                            signUpEmailIssueKind === 'captcha_mismatch'
+                                                ? 'Sign-up blocked — no email sent yet'
+                                                : signUpEmailIssueKind === 'config'
+                                                    ? 'Supabase not configured'
+                                                    : t('emailDeliveryProblemTitle') || 'Email not delivered'}
+                                        </p>
+                                        <p className="text-amber-950/90">{emailDeliveryHint}</p>
+                                        {signUpEmailIssueKind === 'captcha_mismatch' ? (
+                                            <p className="text-amber-800/80 pt-1">
+                                                This is a dashboard configuration issue, not a stale captcha tick. Update the secret in Supabase to match your site key, then use Request Account from the registration form again (not only Resend here).
+                                            </p>
+                                        ) : signUpEmailIssueKind === 'captcha' ? (
+                                            <p className="text-amber-800/80 pt-1">
+                                                Complete the security check below, then use Request Account again (or Resend after a successful partial sign-up). The development-only code is not from Supabase when sign-up failed.
+                                            </p>
+                                        ) : (
+                                            <p className="text-amber-800/80 pt-1">
+                                                {t('emailDeliveryProblemFooter') ||
+                                                    'Typical fix: deploy send-confirmation-email, set RESEND_API_KEY in Supabase, and verify your domain in Resend (required to send to any Gmail address).'}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                                 <p className="text-xs text-gray-400 text-center">
                                     {t('didNotReceiveCode')}
                                 </p>
+                                <AuthCaptcha
+                                    key={resendCaptchaMountKey}
+                                    onToken={setResendCaptchaToken}
+                                    className="flex justify-center min-h-[68px] py-1"
+                                />
                                 <button
                                     type="button"
                                     onClick={async () => {
                                         setRegisterError(null);
+                                        if (getAuthCaptchaConfig() && !resendCaptchaToken?.trim()) {
+                                            setRegisterError(
+                                                t('captchaRequired') || 'Please complete the security check before resending.'
+                                            );
+                                            return;
+                                        }
                                         setLoading(true);
-                                        const result = await resendSignUpConfirmation(pendingEmail);
+                                        const r6 = await resendSixDigitConfirmationEmail(
+                                            pendingEmail,
+                                            resendCaptchaToken
+                                        );
                                         setLoading(false);
-                                        if (result.success) {
-                                            setRegisterError(null);
-                                            alert(t('confirmationResent') || 'Confirmation email resent! Check your inbox and spam folder.');
+                                        if (r6.success) {
+                                            setResendCaptchaMountKey((k) => k + 1);
+                                            setResendCaptchaToken(null);
+                                            setEmailDeliveryHint(null);
+                                            setSignUpEmailIssueKind(null);
+                                            setCheckEmailDetailMessage(
+                                                t('confirmationCodeSentEmailAndSms') ||
+                                                    "We've sent a 6-digit confirmation code to your email."
+                                            );
+                                            alert(
+                                                (t('confirmationResent') ||
+                                                    'Confirmation code email sent! Check inbox and spam.') +
+                                                    ' ' +
+                                                    (t('signupLinkMaybeSentShort') ||
+                                                        'You may also get a separate sign-up link email from our auth provider.')
+                                            );
                                         } else {
-                                            setRegisterError(result.message || 'Could not resend. Please try again.');
+                                            setEmailDeliveryHint(r6.message);
+                                            if (/captcha/i.test(r6.message)) {
+                                                setRegisterError(r6.message);
+                                                setSignUpEmailIssueKind('captcha');
+                                            } else {
+                                                alert(
+                                                    (t('resendPartialHelp') ||
+                                                        'The 6-digit code email could not be sent. Check your inbox for a sign-up confirmation link from our auth provider instead.') +
+                                                        ' ' +
+                                                        (t('fixSixDigitEmailHint') ||
+                                                            'To receive the 6-digit code in Gmail, configure Resend + verify your domain (see README).')
+                                                );
+                                            }
                                         }
                                     }}
                                     disabled={loading}
@@ -458,7 +585,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 >
                                     {t('resendCode') || 'Resend confirmation code'}
                                 </button>
-                                {import.meta.env.DEV && (() => {
+                                {import.meta.env.DEV &&
+                                    signUpEmailIssueKind !== 'captcha' &&
+                                    signUpEmailIssueKind !== 'captcha_mismatch' &&
+                                    (() => {
                                     const pending = getPendingRegistration(pendingEmail);
                                     return pending?.token ? (
                                         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-center font-mono" role="status">
@@ -509,27 +639,34 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label htmlFor="register-first-name" className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('firstName')}</label>
-                                        <input id="register-first-name" name="firstName" type="text" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder={t('firstNamePlaceholder')} />
+                                        <input id="register-first-name" name="firstName" type="text" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors" placeholder={t('firstNamePlaceholder')} />
                                     </div>
                                     <div>
                                         <label htmlFor="register-last-name" className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('lastName')}</label>
-                                        <input id="register-last-name" name="lastName" type="text" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder={t('lastNamePlaceholder')} />
+                                        <input id="register-last-name" name="lastName" type="text" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} required className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors" placeholder={t('lastNamePlaceholder')} />
                                     </div>
                                 </div>
                                 <div>
-                                    <label htmlFor="register-username" className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('username')} <span className="text-red-500" title={t('requiredForSecurity')}>*</span></label>
+                                    <label htmlFor="register-username" className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                        {t('username')}{' '}
+                                        <span className="text-red-500" title={t('requiredPasswordResetMarker')} aria-hidden>*</span>
+                                    </label>
                                     <div className="relative">
                                         <Icons.User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input id="register-username" name="username" type="text" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required minLength={1} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder={t('usernamePlaceholder')} aria-required="true" />
+                                        <input id="register-username" name="username" type="text" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required minLength={1} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors" placeholder={t('usernamePlaceholder')} aria-required="true" />
                                     </div>
                                     <p className="text-[10px] text-gray-400 mt-0.5">{t('usernameRequiredHint')}</p>
                                 </div>
                                 <div>
-                                    <label htmlFor="register-email" className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('emailLabel')}</label>
+                                    <label htmlFor="register-email" className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                                        {t('emailLabel')}{' '}
+                                        <span className="text-red-500" title={t('requiredPasswordResetMarker')} aria-hidden>*</span>
+                                    </label>
                                     <div className="relative">
                                         <Icons.Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input id="register-email" name="email" type="email" autoComplete="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder={t('registrationEmailPlaceholder')} />
+                                        <input id="register-email" name="email" type="email" autoComplete="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} required className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors" placeholder={t('registrationEmailPlaceholder')} aria-required="true" />
                                     </div>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">{t('emailRequiredHint')}</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('phone')}</label>
@@ -561,16 +698,26 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('passwordLabel')}</label>
                                     <div className="relative">
                                         <Icons.Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input type="password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} required minLength={6} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="••••••••" />
+                                        <input type={showRegPassword ? 'text' : 'password'} value={regPassword} onChange={(e) => setRegPassword(e.target.value)} required minLength={6} autoComplete="new-password" className="w-full pl-10 pr-11 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors bg-white" placeholder="••••••••" />
+                                        <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors" aria-label={showRegPassword ? t('hidePassword') || 'Hide password' : t('showPassword') || 'Show password'}>
+                                            {showRegPassword ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
+                                        </button>
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t('confirmPassword')}</label>
                                     <div className="relative">
                                         <Icons.Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20" placeholder="••••••••" />
+                                        <input type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} autoComplete="new-password" className="w-full pl-10 pr-11 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-colors bg-white" placeholder="••••••••" />
+                                        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors" aria-label={showConfirmPassword ? t('hidePassword') || 'Hide password' : t('showPassword') || 'Show password'}>
+                                            {showConfirmPassword ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
+                                        </button>
                                     </div>
                                 </div>
+                                <AuthCaptcha
+                                    onToken={setRegisterCaptchaToken}
+                                    className="flex justify-center min-h-[68px] py-1"
+                                />
                                 {registerError && <p className="text-sm text-red-600">{registerError}</p>}
                                 <button type="submit" disabled={loading} className="w-full py-3 text-white rounded-xl font-bold hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-70" style={{ backgroundColor: isDefaultBlue ? '#2563eb' : primaryColor }}>
                                     {loading ? t('sending') : t('requestAccount')}
@@ -586,6 +733,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                         onClick={() => {
                                             setView('register');
                                             setRegisterError(null);
+                                            setRegisterCaptchaToken(null);
                                             setFirstName('');
                                             setLastName('');
                                             setUsername('');
@@ -603,7 +751,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, theme }) => {
                                 {(view === 'register' || view === 'check-email') && t('alreadyHaveAccount')}
                                 {(view === 'register' || view === 'check-email') && (
                                     <button 
-                                        onClick={() => { setView('login'); setRegisterError(null); }}
+                                        onClick={() => {
+                                            setView('login');
+                                            setRegisterError(null);
+                                            setEmailDeliveryHint(null);
+                                            setSignUpEmailIssueKind(null);
+                                        }}
                                         className="font-bold ml-1 text-blue-600 hover:text-blue-700 underline"
                                         style={!isDefaultBlue ? { color: primaryColor } : undefined}
                                     >

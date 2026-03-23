@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Icons } from '../components/Icon';
 import { useUser } from '../contexts/UserContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import type { User } from '../types';
 
 interface ProfileProps {
     onBack?: () => void;
@@ -11,7 +12,7 @@ const Profile: React.FC<ProfileProps> = ({ onBack }) => {
     const { user, updateUser } = useUser();
     const { t } = useLanguage();
     const [isEditing, setIsEditing] = useState(false);
-    const [editedUser, setEditedUser] = useState(user || {});
+    const [editedUser, setEditedUser] = useState<Partial<User>>(user || {});
     const [activeSection, setActiveSection] = useState<'profile' | 'stats' | 'skills'>('profile');
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [showAvatarConfirm, setShowAvatarConfirm] = useState(false);

@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { DOWNTOWN_YANGON } from '../constants';
 import { IncidentReport, Resource } from '../types';
 
 declare global {
@@ -8,15 +9,35 @@ declare global {
   }
 }
 
+export interface IncidentMapPin {
+  lat: number;
+  lng: number;
+  label: string;
+  /** Shown under the title in the pin popup (e.g. localised “Search area”). */
+  subtitle?: string;
+}
+
 interface IncidentMapProps {
   reports: (IncidentReport | Resource)[];
   centerLat?: number;
   centerLng?: number;
   showUserLocation?: boolean;
   onLocationUpdate?: (lat: number, lng: number) => void;
+  /** Extra markers (e.g. geocoded search location) — shown with a distinct pin. */
+  mapPins?: IncidentMapPin[];
 }
 
-const IncidentMap: React.FC<IncidentMapProps> = ({ reports, centerLat = 17.866, centerLng = 98.195, showUserLocation = false, onLocationUpdate }) => {
+const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const IncidentMap: React.FC<IncidentMapProps> = ({
+    reports,
+    centerLat = DOWNTOWN_YANGON.lat,
+    centerLng = DOWNTOWN_YANGON.lng,
+    showUserLocation = false,
+    onLocationUpdate,
+    mapPins = [],
+}) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<any>(null);
     const userMarkerRef = useRef<any>(null);
@@ -36,6 +57,18 @@ const IncidentMap: React.FC<IncidentMapProps> = ({ reports, centerLat = 17.866, 
             }).addTo(mapInstance.current);
         } else {
              mapInstance.current.setView([centerLat, centerLng], 12);
+        }
+
+        // Let reporter/responder pin the incident location by clicking on the map.
+        const handleMapClick = (e: any) => {
+            const lat = e?.latlng?.lat;
+            const lng = e?.latlng?.lng;
+            if (typeof lat !== 'number' || typeof lng !== 'number') return;
+            onLocationUpdate?.(lat, lng);
+        };
+
+        if (typeof onLocationUpdate === 'function') {
+            mapInstance.current.on('click', handleMapClick);
         }
 
         // Clear existing markers
@@ -137,12 +170,35 @@ const IncidentMap: React.FC<IncidentMapProps> = ({ reports, centerLat = 17.866, 
                 .bindPopup(popupContent);
         });
 
+        mapPins.forEach((pin) => {
+            const pinIcon = window.L.divIcon({
+                className: 'safesphere-search-pin',
+                html: `<div style="width:20px;height:20px;border-radius:50%;background:#7c3aed;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35)"></div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10],
+            });
+            window.L.marker([pin.lat, pin.lng], { icon: pinIcon, zIndexOffset: 800 })
+                .addTo(mapInstance.current)
+                .bindPopup(
+                    `<div style="font-family:Inter,sans-serif;min-width:140px"><b style="font-size:13px">${esc(pin.label)}</b>${
+                        pin.subtitle
+                            ? `<br/><span style="font-size:11px;color:#6b7280">${esc(pin.subtitle)}</span>`
+                            : ''
+                    }</div>`
+                );
+        });
+
         // Force a resize calculation after render to ensure map tiles load correctly
         setTimeout(() => {
             mapInstance.current.invalidateSize();
         }, 100);
 
-    }, [reports, centerLat, centerLng]);
+        return () => {
+            if (typeof onLocationUpdate === 'function') {
+                mapInstance.current?.off('click', handleMapClick);
+            }
+        };
+    }, [reports, centerLat, centerLng, onLocationUpdate, mapPins]);
 
     // Live GPS: show present user location when showUserLocation is true
     useEffect(() => {
@@ -180,11 +236,12 @@ const IncidentMap: React.FC<IncidentMapProps> = ({ reports, centerLat = 17.866, 
             });
             userMarkerRef.current = window.L.marker([userLoc.lat, userLoc.lng], { icon, zIndexOffset: 1000 }).addTo(mapInstance.current).bindTooltip('You are here', { direction: 'top' });
         }
-        // Center on user when no reports (e.g. waiting for incident location)
-        if (reports.length === 0) {
+        // Do not force-centre to GPS when the caller supports pinning (report form).
+        // If there are no incident reports and the caller did not provide pinning, centre on the user.
+        if (reports.length === 0 && !onLocationUpdate) {
             mapInstance.current.setView([userLoc.lat, userLoc.lng], 14);
         }
-    }, [userLoc, reports.length]);
+    }, [userLoc, reports.length, onLocationUpdate]);
 
     return <div ref={mapContainer} className="w-full h-full rounded-2xl z-0" />;
 };

@@ -155,7 +155,7 @@ const ResourceForm: React.FC<ResourceFormProps> = ({ onCancel, onSuccess, initia
                             value={phone} 
                             onChange={e => setPhone(e.target.value)} 
                             className="w-full p-3 rounded-xl border border-gray-300 text-sm"
-                            placeholder="555-0123"
+                            placeholder="+95 1 538 055"
                             required
                         />
                     </div>
@@ -168,7 +168,7 @@ const ResourceForm: React.FC<ResourceFormProps> = ({ onCancel, onSuccess, initia
                         value={address} 
                         onChange={e => setAddress(e.target.value)} 
                         className="w-full p-3 rounded-xl border border-gray-300 text-sm"
-                        placeholder="123 Safety Blvd"
+                        placeholder="Lanmadaw Street, Bahan Township, Yangon"
                         required
                     />
                 </div>

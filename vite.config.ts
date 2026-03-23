@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
     const env = { ...loadEnv(mode, process.cwd(), ''), ...loadEnv(mode, process.cwd(), 'VITE_') };
     const analyzeBundle = process.env.ANALYZE === 'true';
     return {
+      envDir: path.resolve(__dirname),
       appType: 'spa',
       server: {
         port: 3000,

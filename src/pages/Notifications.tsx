@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Icons } from '../components/Icon';
 import { fetchEarthquakes } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
+import { getNotifications, markNotificationRead, removeNotification, type UserNotification } from '../services/notificationService';
 
 interface NotificationsProps {
     onBack?: () => void;
     onNavigateToMap?: () => void;
+    onNavigateToPrepare?: () => void;
 }
 
 interface Notification {
@@ -15,6 +17,7 @@ interface Notification {
     message: string;
     timestamp: string;
     read: boolean;
+    linkTab?: string;
 }
 
 const formatTimeAgo = (epochMs: number, t: (key: string) => string): string => {
@@ -28,9 +31,12 @@ const formatTimeAgo = (epochMs: number, t: (key: string) => string): string => {
     return new Date(epochMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
-const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }) => {
+const USER_NOTIFICATION_ID_OFFSET = 50000; // User notifications use IDs >= this
+
+const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap, onNavigateToPrepare }) => {
     const { t } = useLanguage();
     const [earthquakes, setEarthquakes] = useState<{ id: string; mag: number; place: string; time: number; title?: string }[]>([]);
+    const [userNotifications, setUserNotifications] = useState<UserNotification[]>([]);
 
     const initialNotifications = useMemo<Notification[]>(() => [
         {
@@ -91,8 +97,14 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
     }, []);
 
     useEffect(() => {
+        setUserNotifications(getNotifications());
+        const interval = setInterval(() => setUserNotifications(getNotifications()), 2000);
+        return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
         setNotifications(prev => {
-            const updatedMap = new Map(prev.map(n => [n.id, n]));
+            const updatedMap = new Map<number, Notification>(prev.map((n): [number, Notification] => [n.id, n]));
             initialNotifications.forEach(initial => {
                 const existing = updatedMap.get(initial.id);
                 if (existing) {
@@ -121,22 +133,44 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
         }));
     }, [earthquakes, t]);
 
+    const mappedUserNotifications = useMemo((): Notification[] => {
+        return userNotifications.map(un => ({
+            id: USER_NOTIFICATION_ID_OFFSET + un.id,
+            type: un.type as Notification['type'],
+            title: un.title,
+            message: un.message,
+            timestamp: formatTimeAgo(un.timestamp, t),
+            read: un.read,
+            linkTab: un.linkTab,
+        }));
+    }, [userNotifications, t]);
+
     const displayNotifications = useMemo(() => {
-        return [...seismicNotifications, ...notifications.filter(n => n.id < 90000)];
-    }, [seismicNotifications, notifications]);
+        return [...mappedUserNotifications, ...seismicNotifications, ...notifications.filter(n => n.id < 90000 && n.id < USER_NOTIFICATION_ID_OFFSET)];
+    }, [mappedUserNotifications, seismicNotifications, notifications]);
 
     const markAsRead = (id: number) => {
-        setNotifications(prev => 
-            prev.map(n => n.id === id ? { ...n, read: true } : n)
-        );
+        if (id >= USER_NOTIFICATION_ID_OFFSET) {
+            markNotificationRead(id - USER_NOTIFICATION_ID_OFFSET);
+            setUserNotifications(getNotifications());
+        } else {
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+        }
     };
 
     const markAllAsRead = () => {
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        userNotifications.forEach(un => markNotificationRead(un.id));
+        setUserNotifications(getNotifications());
     };
 
     const clearNotification = (id: number) => {
-        setNotifications(prev => prev.filter(n => n.id !== id));
+        if (id >= USER_NOTIFICATION_ID_OFFSET) {
+            removeNotification(id - USER_NOTIFICATION_ID_OFFSET);
+            setUserNotifications(getNotifications());
+        } else {
+            setNotifications(prev => prev.filter(n => n.id !== id));
+        }
     };
 
     const getNotificationColor = (type: string) => {
@@ -262,6 +296,14 @@ const Notifications: React.FC<NotificationsProps> = ({ onBack, onNavigateToMap }
                                         className="mt-3 px-4 py-2 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors"
                                     >
                                         {notification.type === 'seismic' ? t('viewOnLiveMap') : t('viewDetailsBtn')}
+                                    </button>
+                                )}
+                                {notification.linkTab === 'prepare' && onNavigateToPrepare && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onNavigateToPrepare(); }}
+                                        className="mt-3 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        {t('viewDrills') || 'View Drills'}
                                     </button>
                                 )}
                             </div>

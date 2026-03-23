@@ -86,6 +86,15 @@ body.login-page-active {
   html { font-size: 17px; }
 }
 
+/* Force LTR for comment input (fixes reversed text when parent has RTL) */
+.comment-input-ltr,
+input.comment-input-ltr,
+textarea.comment-input-ltr {
+  direction: ltr !important;
+  unicode-bidi: isolate;
+  text-align: left !important;
+}
+
 /* Custom Utilities */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -343,4 +352,65 @@ body.login-page-active {
 .score-chart-line {
   stroke-dasharray: 2 4;
   animation: scoreLineDraw 0.8s ease-out forwards;
+}
+
+/* Gamified celebration - Duolingo-style balloons, confetti, sparkles */
+@keyframes celebrationBalloonRise {
+  0% {
+    transform: translateY(0) scale(0.3);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-120vh) scale(1);
+    opacity: 0.9;
+  }
+}
+
+@keyframes celebrationConfettiBurst {
+  0% {
+    transform: translate(0, 0) scale(0);
+    opacity: 1;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--cf-x, 0), var(--cf-y, 0)) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes celebrationSparkle {
+  0% {
+    transform: rotate(var(--sparkle-deg, 0deg)) translateY(-60px) scale(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: rotate(var(--sparkle-deg, 0deg)) translateY(-120px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes celebrationPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-celebrationPop {
+  animation: celebrationPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }

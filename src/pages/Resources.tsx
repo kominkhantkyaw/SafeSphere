@@ -1,17 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icons } from '../components/Icon';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useUser } from '../contexts/UserContext';
 import { Resource } from '../types';
 import { fetchResources, deleteResource } from '../services/api';
-import IncidentMap from '../components/IncidentMap';
+import IncidentMap, { type IncidentMapPin } from '../components/IncidentMap';
+import { geocodePlaceQuery, type NominatimHit } from '../services/nominatimGeocode';
+import { resourceMatchesSearchQuery } from '../utils/resourceSearch';
 import ResourceForm from '../components/ResourceForm';
+import { canManageResources as canManageResourcesPerm } from '../utils/permissions';
+import {
+    buildResourcePrintHtml,
+    googleMapsDirectionsUrl,
+    resourceEmergencyPlainText,
+    resourceQrDataUrl,
+} from '../utils/resourceEmergencyCard';
+
+type ResourceListItem = Resource & { distanceNum: number; distanceToSearch: number };
 
 const Resources: React.FC = () => {
     const { t } = useLanguage();
     const { user } = useUser();
-    /** Only Admin can add, edit, or delete resources. Reporter and Responder can view, print, share, get directions. */
-    const canManageResources = user?.role === 'Admin';
+    /** Admin and Responder can add, edit, or delete resources. Reporter can view, print, share, get directions. */
+    const canManageResources = canManageResourcesPerm(user);
     const [resources, setResources] = useState<Resource[]>([]);
     const [filters, setFilters] = useState<string[]>(['all']); // Multi-filter
     const [urgencyFilter, setUrgencyFilter] = useState<string>('all'); // Urgency
@@ -22,12 +33,21 @@ const Resources: React.FC = () => {
     // States for Actions
     const [showForm, setShowForm] = useState(false);
     const [editingResource, setEditingResource] = useState<Resource | null>(null);
-    const [selectedResource, setSelectedResource] = useState<Resource | null>(null); // For Details Modal
+    const [selectedResource, setSelectedResource] = useState<ResourceListItem | null>(null); // For Details Modal
     const [showQR, setShowQR] = useState<Resource | null>(null);
+    const [qrPreviewDataUrl, setQrPreviewDataUrl] = useState<string>('');
+    const [qrActionBusy, setQrActionBusy] = useState(false);
+    const [printChoiceFor, setPrintChoiceFor] = useState<Resource | null>(null);
+    const [searchGeo, setSearchGeo] = useState<NominatimHit | null>(null);
+    const [geocodeStatus, setGeocodeStatus] = useState<'idle' | 'loading' | 'ok' | 'empty' | 'error'>('idle');
 
     // Default "Nearby" location (Fallbacks) - Myanmar (Yangon)
     const DEFAULT_LAT = 16.866;
     const DEFAULT_LNG = 96.195;
+    const SEARCH_RADIUS_KM = 125;
+
+    const userLocRef = useRef<{ lat: number; lng: number } | null>(null);
+    userLocRef.current = userLoc;
 
     const loadData = () => {
         fetchResources().then(setResources);
@@ -35,16 +55,59 @@ const Resources: React.FC = () => {
 
     useEffect(() => {
         loadData();
-        
-        if ('geolocation' in navigator) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                () => setUserLoc({ lat: DEFAULT_LAT, lng: DEFAULT_LNG }) // Fallback
-            );
-        } else {
-            setUserLoc({ lat: DEFAULT_LAT, lng: DEFAULT_LNG });
-        }
     }, []);
+
+    /** Live GPS for distances and map bias — updates as the device moves. */
+    useEffect(() => {
+        if (!('geolocation' in navigator)) {
+            setUserLoc({ lat: DEFAULT_LAT, lng: DEFAULT_LNG });
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => setUserLoc({ lat: DEFAULT_LAT, lng: DEFAULT_LNG }),
+            { enableHighAccuracy: false, maximumAge: 120_000, timeout: 15_000 }
+        );
+        const watchId = navigator.geolocation.watchPosition(
+            (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => {},
+            { enableHighAccuracy: false, maximumAge: 60_000, timeout: 20_000 }
+        );
+        return () => navigator.geolocation.clearWatch(watchId);
+    }, []);
+
+    useEffect(() => {
+        const q = search.trim();
+        if (q.length < 3) {
+            setSearchGeo(null);
+            setGeocodeStatus('idle');
+            return;
+        }
+        const ac = new AbortController();
+        const timer = window.setTimeout(() => {
+            setGeocodeStatus('loading');
+            const bias = userLocRef.current;
+            geocodePlaceQuery(q, {
+                signal: ac.signal,
+                biasLat: bias?.lat,
+                biasLon: bias?.lng,
+            })
+                .then((hit) => {
+                    if (ac.signal.aborted) return;
+                    setSearchGeo(hit);
+                    setGeocodeStatus(hit ? 'ok' : 'empty');
+                })
+                .catch(() => {
+                    if (ac.signal.aborted) return;
+                    setSearchGeo(null);
+                    setGeocodeStatus('error');
+                });
+        }, 500);
+        return () => {
+            window.clearTimeout(timer);
+            ac.abort();
+        };
+    }, [search]);
 
     const deg2rad = (deg: number) => {
         return deg * (Math.PI/180);
@@ -83,24 +146,100 @@ const Resources: React.FC = () => {
         }
     };
 
-    const filteredResources = resources.map(r => {
-        // Calculate distance if user location is known, else use -1 to signify unknown
-        const dist = userLoc ? getDistance(userLoc.lat, userLoc.lng, r.lat, r.lng) : -1;
-        return { ...r, distanceNum: dist };
-    }).filter(r => {
-        const matchesType = filters.includes('all') || filters.includes(r.type) || (filters.includes('nearby') && r.distanceNum >= 0 && r.distanceNum < 5);
-        const matchesUrgency = urgencyFilter === 'all' || r.urgency === urgencyFilter;
-        const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase());
-        return matchesType && matchesUrgency && matchesSearch;
-    }).sort((a, b) => {
-        if (sortBy === 'name') {
-            return a.name.localeCompare(b.name);
+    const typeLabels = useMemo(
+        () =>
+            ({
+                medical: t('medicalFilter'),
+                fire: t('fireFilter'),
+                police: t('policeFilter'),
+                shelter: t('shelterFilter'),
+            }) as Record<Resource['type'], string>,
+        [t]
+    );
+
+    const searchSortsByGeo = useMemo(() => {
+        const q = search.trim();
+        if (!q || !searchGeo) return false;
+        return !resources.some((r) => resourceMatchesSearchQuery(r, q, typeLabels));
+    }, [search, searchGeo, resources, typeLabels]);
+
+    const filteredResources = useMemo((): ResourceListItem[] => {
+        const q = search.trim();
+
+        let anyTextMatch = false;
+        if (q) {
+            for (const r of resources) {
+                if (resourceMatchesSearchQuery(r, q, typeLabels)) {
+                    anyTextMatch = true;
+                    break;
+                }
+            }
         }
-        // Distance sort: push unknown distances (-1) to bottom
-        const distA = a.distanceNum >= 0 ? a.distanceNum : 999999;
-        const distB = b.distanceNum >= 0 ? b.distanceNum : 999999;
-        return distA - distB;
-    });
+
+        const enriched = resources.map((r) => {
+            const distUser = userLoc ? getDistance(userLoc.lat, userLoc.lng, r.lat, r.lng) : -1;
+            const distSearch =
+                searchGeo != null
+                    ? getDistance(searchGeo.lat, searchGeo.lng, r.lat, r.lng)
+                    : Number.POSITIVE_INFINITY;
+            return { ...r, distanceNum: distUser, distanceToSearch: distSearch };
+        });
+
+        const useGeoForFilter = Boolean(q && searchGeo && !anyTextMatch);
+
+        const filtered = enriched.filter((r) => {
+            const matchesType =
+                filters.includes('all') ||
+                filters.includes(r.type) ||
+                (filters.includes('nearby') && r.distanceNum >= 0 && r.distanceNum < 5);
+            const matchesUrgency = urgencyFilter === 'all' || r.urgency === urgencyFilter;
+            const textOk = !q || resourceMatchesSearchQuery(r, q, typeLabels);
+            const geoOk = useGeoForFilter && r.distanceToSearch <= SEARCH_RADIUS_KM;
+            const matchesSearch = !q || textOk || geoOk;
+            return matchesType && matchesUrgency && matchesSearch;
+        });
+
+        filtered.sort((a, b) => {
+            if (sortBy === 'name') {
+                return a.name.localeCompare(b.name);
+            }
+            if (searchSortsByGeo && sortBy === 'distance') {
+                return a.distanceToSearch - b.distanceToSearch;
+            }
+            const distA = a.distanceNum >= 0 ? a.distanceNum : 999999;
+            const distB = b.distanceNum >= 0 ? b.distanceNum : 999999;
+            return distA - distB;
+        });
+        return filtered;
+    }, [
+        resources,
+        userLoc,
+        filters,
+        urgencyFilter,
+        search,
+        searchGeo,
+        sortBy,
+        typeLabels,
+        searchSortsByGeo,
+    ]);
+
+    const resourceMapPins = useMemo<IncidentMapPin[]>(() => {
+        if (!searchGeo || !search.trim()) return [];
+        return [
+            {
+                lat: searchGeo.lat,
+                lng: searchGeo.lng,
+                label: searchGeo.displayName,
+                subtitle: t('resourcesSearchMapPinHint'),
+            },
+        ];
+    }, [searchGeo, search, t]);
+
+    const mapCenter = useMemo(() => {
+        if (searchGeo) return { lat: searchGeo.lat, lng: searchGeo.lng };
+        if (userLoc) return { lat: userLoc.lat, lng: userLoc.lng };
+        return { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
+    }, [searchGeo, userLoc]);
 
     const filterOptions = [
         { id: 'all', label: t('allTypes'), icon: Icons.Layers },
@@ -143,32 +282,168 @@ const Resources: React.FC = () => {
 
     const handleShare = async (r: Resource, e: React.MouseEvent) => {
         e.stopPropagation();
+        const text = resourceEmergencyPlainText(r);
+        const url = googleMapsDirectionsUrl(r);
         if (navigator.share) {
             try {
                 await navigator.share({
                     title: r.name,
-                    text: `${r.name} - ${r.address} (${r.phone})`,
-                    url: window.location.href
+                    text,
+                    url,
                 });
-            } catch (err) { console.log('Share error', err); }
+            } catch (err) {
+                if ((err as Error).name !== 'AbortError') console.log('Share error', err);
+            }
         } else {
-            alert(t('shareNotSupported'));
+            try {
+                await navigator.clipboard.writeText(text);
+                alert(t('resourceDetailsCopied'));
+            } catch {
+                alert(t('shareNotSupported'));
+            }
         }
     };
 
+    const resourceTypeDisplay = (r: Resource) => {
+        const m: Record<Resource['type'], string> = {
+            medical: t('medicalFilter'),
+            fire: t('fireFilter'),
+            police: t('policeFilter'),
+            shelter: t('shelterFilter'),
+        };
+        return m[r.type];
+    };
+
+    const openPrintWindow = useCallback(async (r: Resource, includeMap: boolean) => {
+        try {
+            const html = await buildResourcePrintHtml(
+                r,
+                {
+                    documentMainTitle: t('printResourceDocumentTitle'),
+                    documentTitleSuffix: t('printResourceDocumentSuffix'),
+                    resourceIdLabel: t('printResourceIdLabel'),
+                    facilityRowLabel: t('printResourceFacilityLabel'),
+                    typeRowLabel: t('printResourceTypeRowLabel'),
+                    typeDisplayValue: resourceTypeDisplay(r),
+                    addressSectionTitle: t('printResourceSectionAddress'),
+                    mapSectionTitle: t('printResourceSectionMap'),
+                    coordinatesLabel: t('printResourceGpsLabel'),
+                    phoneLabel: t('printResourcePhoneLabel'),
+                    hoursLabel: t('printResourceHoursLabel'),
+                    urgencyLabel: t('printResourceUrgencyLabel'),
+                    detailsSectionTitle: t('printResourceSectionDetails'),
+                    directionsSectionTitle: t('printResourceSectionNavigation'),
+                    directionsIntro: t('printResourceDirectionsIntro'),
+                    googleDirectionsText: t('printResourceGoogleDirections'),
+                    openStreetMapText: t('printResourceOsmLink'),
+                    mapPrintHint: t('printResourceMapPrintHint'),
+                    omitMapNote: t('printResourceOmitMapNote'),
+                    pointOfContactTitle: t('printResourcePointOfContactTitle'),
+                    nameLabel: t('printResourcePocNameLabel'),
+                    contactPhoneLabel: t('printResourcePocPhoneLabel'),
+                    scanFooterLine: t('printResourceScanFooter'),
+                    attachmentsSectionTitle: t('printResourceAttachmentsSection'),
+                    attachmentsNone: t('printResourceAttachmentsNone'),
+                    qrAlt: t('resourceQrCode'),
+                },
+                { includeMap }
+            );
+            const win = window.open('', '_blank', 'width=780,height=900');
+            if (!win) {
+                alert(t('printPopupBlocked'));
+                return;
+            }
+            win.document.write(html);
+            win.document.close();
+            win.focus();
+            setTimeout(() => {
+                try {
+                    win.print();
+                } catch {
+                    /* ignore */
+                }
+            }, 350);
+        } catch (err) {
+            console.error(err);
+            alert(t('printFailed'));
+        }
+    }, [t]);
+
     const handlePrint = (r: Resource, e: React.MouseEvent) => {
         e.stopPropagation();
-        const win = window.open('', '', 'width=600,height=600');
-        if (win) {
-            win.document.write(`<html><head><title>${r.name}</title></head><body><h1>${r.name}</h1><p>${r.address}</p><p>Phone: ${r.phone}</p><p>${r.description}</p></body></html>`);
-            win.document.close();
-            win.print();
-        }
+        setPrintChoiceFor(r);
     };
 
     const handleQR = (r: Resource, e: React.MouseEvent) => {
         e.stopPropagation();
         setShowQR(r);
+    };
+
+    useEffect(() => {
+        if (!showQR) {
+            setQrPreviewDataUrl('');
+            return;
+        }
+        let cancelled = false;
+        setQrPreviewDataUrl('');
+        resourceQrDataUrl(showQR, 220)
+            .then((url) => {
+                if (!cancelled) setQrPreviewDataUrl(url);
+            })
+            .catch(() => {
+                if (!cancelled) setQrPreviewDataUrl('');
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [showQR]);
+
+    const safeResourceFilename = (resource: Resource) =>
+        resource.name
+            .replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-|-$/g, '')
+            .slice(0, 48) || 'resource';
+
+    const handleDownloadResourceQR = async (resource: Resource) => {
+        setQrActionBusy(true);
+        try {
+            const dataUrl = await resourceQrDataUrl(resource, 640);
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `SafeSphere-Resource-${resource.id}-${safeResourceFilename(resource)}.png`;
+            link.rel = 'noopener';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch {
+            alert(t('qrDownloadFailed'));
+        } finally {
+            setQrActionBusy(false);
+        }
+    };
+
+    const handleCopyResourceDetails = async (resource: Resource) => {
+        const text = resourceEmergencyPlainText(resource);
+        try {
+            await navigator.clipboard.writeText(text);
+            alert(t('resourceDetailsCopied'));
+        } catch {
+            window.prompt(t('copyManuallyHint'), text);
+        }
+    };
+
+    const handleShareFromQrModal = async (resource: Resource) => {
+        const text = resourceEmergencyPlainText(resource);
+        const url = googleMapsDirectionsUrl(resource);
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: resource.name, text, url });
+            } catch (err) {
+                if ((err as Error).name !== 'AbortError') await handleCopyResourceDetails(resource);
+            }
+        } else {
+            await handleCopyResourceDetails(resource);
+        }
     };
 
     // --- Modals ---
@@ -196,29 +471,8 @@ const Resources: React.FC = () => {
                 )}
             </h1>
 
-            {/* Search & Sort */}
-            <div className="flex gap-2 mb-4">
-                <div className="relative flex-1">
-                    <Icons.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input 
-                        type="text" 
-                        placeholder={t('searchResourcesPlaceholder')} 
-                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-black"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
-                <button 
-                    onClick={() => setSortBy(sortBy === 'distance' ? 'name' : 'distance')}
-                    className="px-4 bg-white border border-gray-300 rounded-xl flex items-center justify-center gap-2 font-medium text-sm text-gray-700 whitespace-nowrap min-w-[110px] shadow-sm active:scale-95 transition-all"
-                >
-                    {sortBy === 'distance' ? <Icons.MapPin size={16} className="text-blue-600"/> : <Icons.FileText size={16} className="text-gray-500"/>}
-                    <span>{t('sortPrefix') + ': ' + (sortBy === 'distance' ? t('sortDistance') : t('sortName'))}</span>
-                </button>
-            </div>
-
-            {/* Type Filters (Icons) */}
-            <div className="flex gap-3 overflow-x-auto no-scrollbar mb-4 pb-2 px-1">
+            {/* Type & urgency filters above search so choices are visible first */}
+            <div className="flex gap-3 overflow-x-auto no-scrollbar mb-3 pb-2 px-1">
                 {filterOptions.map(f => {
                     const isActive = filters.includes(f.id);
                     const Icon = f.icon;
@@ -239,8 +493,7 @@ const Resources: React.FC = () => {
                 })}
             </div>
 
-            {/* Urgency Filter (Icons) */}
-            <div className="flex gap-3 overflow-x-auto no-scrollbar mb-6 pb-2 px-1 items-center">
+            <div className="flex gap-3 overflow-x-auto no-scrollbar mb-4 pb-2 px-1 items-center">
                 <button
                      onClick={() => setUrgencyFilter('all')}
                      title={t('anyUrgency')}
@@ -270,6 +523,60 @@ const Resources: React.FC = () => {
                     );
                 })}
             </div>
+
+            {/* Search & Sort */}
+            <div className="flex gap-2 mb-4">
+                <div className="relative flex-1">
+                    <Icons.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <input 
+                        type="text" 
+                        placeholder={t('searchResourcesPlaceholder')} 
+                        className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:border-black"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </div>
+                <button 
+                    onClick={() => setSortBy(sortBy === 'distance' ? 'name' : 'distance')}
+                    className="px-4 bg-white border border-gray-300 rounded-xl flex items-center justify-center gap-2 font-medium text-sm text-gray-700 whitespace-nowrap min-w-[110px] shadow-sm active:scale-95 transition-all"
+                >
+                    {sortBy === 'distance' ? <Icons.MapPin size={16} className="text-blue-600"/> : <Icons.FileText size={16} className="text-gray-500"/>}
+                    <span>{t('sortPrefix') + ': ' + (sortBy === 'distance' ? t('sortDistance') : t('sortName'))}</span>
+                </button>
+            </div>
+
+            {search.trim().length >= 3 && (
+                <p className="text-xs text-gray-500 mb-2 min-h-[1.125rem]" aria-live="polite">
+                    {geocodeStatus === 'loading' ? t('resourcesSearchGeocoding') : ''}
+                    {geocodeStatus === 'ok' && searchSortsByGeo && sortBy === 'distance' ? t('resourcesSearchSortByMap') : ''}
+                    {geocodeStatus === 'error' ? t('resourcesSearchGeoError') : ''}
+                </p>
+            )}
+
+            {typeof window !== 'undefined' && (window as unknown as { L?: unknown }).L ? (
+                <div className="rounded-2xl overflow-hidden border border-gray-200 mb-4 shadow-sm bg-white">
+                    <div className="px-3 py-2 flex items-center justify-between gap-2 bg-gray-50 border-b border-gray-100">
+                        <span className="text-xs font-semibold text-gray-700 shrink-0">{t('resourcesMapLiveGps')}</span>
+                        {searchGeo ? (
+                            <span
+                                className="text-[10px] text-violet-700 font-medium truncate text-right"
+                                title={searchGeo.displayName}
+                            >
+                                {searchGeo.displayName}
+                            </span>
+                        ) : null}
+                    </div>
+                    <div className="h-52 w-full min-h-[13rem]">
+                        <IncidentMap
+                            reports={filteredResources}
+                            centerLat={mapCenter.lat}
+                            centerLng={mapCenter.lng}
+                            showUserLocation
+                            mapPins={resourceMapPins}
+                        />
+                    </div>
+                </div>
+            ) : null}
 
             {/* List */}
             <div className="space-y-4">
@@ -302,13 +609,20 @@ const Resources: React.FC = () => {
                                 <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">
                                     {resource.type}
                                 </span>
-                                {userLoc && resource.distanceNum !== undefined && resource.distanceNum >= 0 && (
+                                {searchSortsByGeo && sortBy === 'distance' && Number.isFinite(resource.distanceToSearch) ? (
+                                    <span className="px-2 py-1 bg-violet-50 text-violet-800 rounded-lg text-xs font-bold border border-violet-100">
+                                        {resource.distanceToSearch < 1
+                                            ? `${Math.round(resource.distanceToSearch * 1000)}m`
+                                            : `${resource.distanceToSearch.toFixed(1)} km`}{' '}
+                                        <span className="font-semibold opacity-90">{t('resourcesDistanceFromSearch')}</span>
+                                    </span>
+                                ) : userLoc && resource.distanceNum >= 0 ? (
                                     <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold border border-blue-100">
-                                        {resource.distanceNum < 1 
-                                            ? `${Math.round(resource.distanceNum * 1000)}m` 
+                                        {resource.distanceNum < 1
+                                            ? `${Math.round(resource.distanceNum * 1000)}m`
                                             : `${resource.distanceNum.toFixed(1)} km`}
                                     </span>
-                                )}
+                                ) : null}
                             </div>
                             
                             {/* Name & Flood Indicator */}
@@ -377,7 +691,31 @@ const Resources: React.FC = () => {
                         </div>
                     );
                 })}
-                {filteredResources.length === 0 && <div className="text-center text-gray-400 py-12">{t('noResourcesFound')}</div>}
+                {filteredResources.length === 0 && (
+                    <div className="text-center text-gray-400 py-12 space-y-4 px-2">
+                        <p>{t('noResourcesFound')}</p>
+                        {search.trim().length >= 3 && (
+                            <div className="flex flex-col sm:flex-row gap-2 justify-center items-stretch max-w-md mx-auto">
+                                <a
+                                    href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(search.trim())}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="py-2.5 px-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                                >
+                                    {t('resourcesSearchOpenOsm')}
+                                </a>
+                                <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(search.trim())}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="py-2.5 px-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                                >
+                                    {t('resourcesSearchOpenGoogle')}
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* --- DETAILS MODAL --- */}
@@ -478,14 +816,33 @@ const Resources: React.FC = () => {
                                 )}
                             </div>
 
-                            <a 
-                                href={`https://www.google.com/maps/dir/?api=1&destination=${selectedResource.lat},${selectedResource.lng}`}
+                            <a
+                                href={googleMapsDirectionsUrl(selectedResource)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="w-full py-4 bg-black text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
                             >
                                 <Icons.MapPin size={20} /> {t('getDirections')}
                             </a>
+                            <p className="text-xs text-gray-500 text-center -mt-1 mb-1 px-1">
+                                {t('resourcePrintBelowDirectionsHint')}
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => void openPrintWindow(selectedResource, false)}
+                                    className="py-3 border-2 border-gray-300 rounded-xl font-bold flex flex-col items-center justify-center gap-1 hover:bg-gray-50 text-gray-900 transition-colors text-xs sm:text-sm min-h-[52px]"
+                                >
+                                    <Icons.Printer size={18} /> {t('resourcePrintWithoutMap')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void openPrintWindow(selectedResource, true)}
+                                    className="py-3 border-2 border-blue-600 text-blue-800 rounded-xl font-bold flex flex-col items-center justify-center gap-1 hover:bg-blue-50 transition-colors text-xs sm:text-sm min-h-[52px]"
+                                >
+                                    <Icons.Printer size={18} /> {t('resourcePrintWithMap')}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -494,23 +851,136 @@ const Resources: React.FC = () => {
             {/* --- QR MODAL --- */}
             {showQR && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl relative">
-                        <button onClick={() => setShowQR(null)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full"><Icons.X size={20} /></button>
-                        <h3 className="font-bold text-lg mb-4">{t('resourceQrCode')}</h3>
-                        
-                        <div className="bg-white border-2 border-gray-100 p-4 rounded-xl inline-block mb-4 shadow-inner">
-                             <img 
-                                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(JSON.stringify({id: showQR.id, type: 'resource'}))}`} 
-                                alt="QR" 
-                                className="w-48 h-48 mix-blend-multiply" 
-                            />
-                        </div>
-                        <p className="text-sm font-bold">{showQR.name}</p>
-                        <p className="text-xs text-gray-500 mb-6">{showQR.address}</p>
-                        
-                        <button className="w-full py-3 bg-gray-100 text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-200">
-                            <Icons.Download size={18} /> {t('downloadButton')}
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-sm shadow-2xl relative text-left max-h-[90vh] overflow-y-auto">
+                        <button
+                            type="button"
+                            onClick={() => setShowQR(null)}
+                            className="absolute top-3 right-3 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full z-10"
+                            aria-label={t('close')}
+                        >
+                            <Icons.X size={20} />
                         </button>
+                        <h3 className="font-bold text-lg mb-1 pr-10 text-center">{t('resourceQrCode')}</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 text-center mb-4">
+                            {showQR.phone} · {showQR.address}
+                        </p>
+
+                        <div className="flex justify-center mb-4">
+                            <div className="bg-white border-2 border-gray-100 dark:border-gray-700 p-3 rounded-xl shadow-inner inline-flex items-center justify-center min-h-[200px] min-w-[200px]">
+                                {qrPreviewDataUrl ? (
+                                    <img src={qrPreviewDataUrl} alt="" className="w-48 h-48" width={192} height={192} />
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2 text-gray-400 text-sm p-4">
+                                        <Icons.RefreshCw className="animate-spin" size={24} />
+                                        <span>{t('qrNearbyLoading')}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <p className="text-sm font-bold text-gray-900 dark:text-white text-center">{showQR.name}</p>
+                        {showQR.description ? (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 text-center mt-1 mb-4 line-clamp-3">
+                                {showQR.description}
+                            </p>
+                        ) : (
+                            <div className="mb-4" />
+                        )}
+
+                        <a
+                            href={googleMapsDirectionsUrl(showQR)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-3 mb-3 bg-black dark:bg-gray-100 dark:text-black text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                        >
+                            <Icons.MapPin size={18} /> {t('openLiveMapDirections')}
+                        </a>
+
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                            <button
+                                type="button"
+                                disabled={qrActionBusy || !qrPreviewDataUrl}
+                                onClick={() => void handleDownloadResourceQR(showQR)}
+                                className="py-3 border-2 border-blue-600 text-blue-700 dark:text-blue-400 rounded-xl font-bold flex items-center justify-center gap-1.5 hover:bg-blue-50 dark:hover:bg-blue-950/40 disabled:opacity-50 text-sm"
+                            >
+                                <Icons.Download size={16} /> {t('downloadButton')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleCopyResourceDetails(showQR)}
+                                className="py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl font-bold flex items-center justify-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                            >
+                                <Icons.Clipboard size={16} /> {t('resourceCopyDetails')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleShareFromQrModal(showQR)}
+                                className="py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl font-bold flex items-center justify-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                            >
+                                <Icons.Share size={16} /> {t('resourceShareEmergency')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void openPrintWindow(showQR, false)}
+                                className="py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl font-bold flex items-center justify-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm"
+                            >
+                                <Icons.Printer size={16} /> {t('resourcePrintWithoutMap')}
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void openPrintWindow(showQR, true)}
+                            className="w-full py-3 mb-2 border-2 border-blue-600 text-blue-800 dark:text-blue-300 dark:border-blue-500 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-sm"
+                        >
+                            <Icons.Printer size={16} /> {t('resourcePrintWithMap')}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {printChoiceFor && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="resource-print-choice-title"
+                >
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-sm shadow-2xl border border-gray-100 dark:border-gray-800">
+                        <h3 id="resource-print-choice-title" className="font-bold text-lg text-center mb-1">
+                            {t('resourcePrintChooseTitle')}
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 text-center mb-4">
+                            {printChoiceFor.name}
+                        </p>
+                        <div className="flex flex-col gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void openPrintWindow(printChoiceFor, false);
+                                    setPrintChoiceFor(null);
+                                }}
+                                className="w-full py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                                <Icons.Printer size={18} /> {t('resourcePrintWithoutMap')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void openPrintWindow(printChoiceFor, true);
+                                    setPrintChoiceFor(null);
+                                }}
+                                className="w-full py-3 border-2 border-blue-600 text-blue-800 dark:text-blue-300 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                            >
+                                <Icons.Printer size={18} /> {t('resourcePrintWithMap')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPrintChoiceFor(null)}
+                                className="w-full py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:underline"
+                            >
+                                {t('close')}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

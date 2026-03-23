@@ -2,7 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './styles/index.css';
 import App from './App';
+import { initWebVitalsReporting } from './services/reportWebVitals';
 import './pwa-install'; // PWA install prompt handler
+
+initWebVitalsReporting();
 
 // Register PWA service worker for offline/install (production build)
 import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true })).catch(() => {});
@@ -12,11 +15,14 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-class AppErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error: Error | null }>
-   {
-  state = { hasError: false, error: null as Error | null };
+type AppErrorBoundaryProps = { children: React.ReactNode };
+type AppErrorBoundaryState = { hasError: boolean; error: Error | null };
+
+class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
+  constructor(props: AppErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };

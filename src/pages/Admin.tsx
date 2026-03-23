@@ -16,6 +16,7 @@ import InventoryForm from '../components/InventoryForm';
 import InjuryForm from '../components/InjuryForm';
 import UserForm from '../components/UserForm';
 import SafetyMapEditor from '../components/SafetyMapEditor';
+import ReportTriageBarV2, { type ReportProgressStep } from '../components/ReportTriageBarV2';
 
 const ModalContainer = ({ children }: { children?: React.ReactNode }) => (
     <div className="fixed inset-0 z-[60] bg-gray-50/90 backdrop-blur-sm overflow-y-auto p-4 pt-8 animate-in fade-in">
@@ -60,6 +61,38 @@ const Admin: React.FC = () => {
 
     const [showQR, setShowQR] = useState<any | null>(null);
 
+    type QrModalItem = { id: string | number; typeLabel: string; name?: string; type?: string; item?: string };
+
+    const buildAdminQrUrl = (item: QrModalItem, size: number) => {
+        const data = encodeURIComponent(JSON.stringify({ id: item.id, type: item.typeLabel }));
+        return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${data}`;
+    };
+
+    const handleDownloadAdminQr = async (item: QrModalItem) => {
+        const qrUrl = buildAdminQrUrl(item, 512);
+        const raw = item.name || item.type || item.item || `id-${item.id}`;
+        const safeName = String(raw)
+            .replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-|-$/g, '')
+            .slice(0, 48);
+        try {
+            const response = await fetch(qrUrl);
+            if (!response.ok) throw new Error('QR fetch failed');
+            const blob = await response.blob();
+            const objectUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = `SafeSphere-QR-${item.typeLabel}-${item.id}-${safeName}.png`;
+            link.rel = 'noopener';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(objectUrl);
+        } catch {
+            window.open(qrUrl, '_blank', 'noopener,noreferrer');
+        }
+    };
+
     const loadData = async () => {
         const [u, r, i, inj, allUsers] = await Promise.all([
             fetchUser(), fetchReports(), fetchInventory(), fetchInjuries(), fetchAllUsers()
@@ -84,7 +117,7 @@ const Admin: React.FC = () => {
         
         // If not Admin:
         if (context === 'user') return false; 
-        if (context === 'map') return false; // Only admin edits map for now
+        if (context === 'map') return role === 'Responder'; // Admin and Responder can edit map
         if (action === 'delete') return false;
 
         if (context === 'inventory' || context === 'injury') {
@@ -96,16 +129,10 @@ const Admin: React.FC = () => {
             if (action === 'add') return role === 'Responder' || role === 'Reporter';
             if (action === 'edit') return role === 'Responder'; 
             
-            // Granular permissions for Responders
-            if (action === 'approve') {
-                return role === 'Responder' && (permissions?.includes('approve_reports') || false);
-            }
-            if (action === 'request_info') {
-                return role === 'Responder' && (permissions?.includes('request_info') || false);
-            }
-            if (action === 'archive') {
-                return role === 'Responder' && (permissions?.includes('approve_reports') || false);
-            }
+            // Responder can always process reporter reports.
+            if (action === 'approve') return role === 'Responder';
+            if (action === 'request_info') return role === 'Responder';
+            if (action === 'archive') return role === 'Responder';
         }
         return false;
     };
@@ -116,7 +143,7 @@ const Admin: React.FC = () => {
         { id: 'logistics', labelKey: 'logistics', icon: Icons.Truck, visible: can('view', 'inventory') },
         { id: 'medical', labelKey: 'triage', icon: Icons.Medical, visible: can('view', 'injury') },
         { id: 'team', labelKey: 'team', icon: Icons.User, visible: can('view', 'user') },
-        { id: 'map', labelKey: 'safetyMap', icon: Icons.Map, visible: can('edit', 'map') || currentUser?.role === 'Admin' },
+        { id: 'map', labelKey: 'safetyMap', icon: Icons.Map, visible: can('edit', 'map') },
     ].filter(tab => tab.visible);
 
     useEffect(() => {
@@ -128,18 +155,18 @@ const Admin: React.FC = () => {
 
     // --- Action Handlers ---
 
-    const handleDelete = async (id: number, type: ContextType) => {
+    const handleDelete = async (id: string | number, type: ContextType) => {
         if (!can('delete', type)) { alert(t('permissionDeniedAdmin')); return; }
         if (!window.confirm(t('deleteItemConfirm'))) return;
 
-        if (type === 'report') await deleteReport(id);
-        if (type === 'inventory') await deleteInventoryItem(id);
-        if (type === 'injury') await deleteInjuryCase(id);
-        if (type === 'user') await deleteUser(id);
+        if (type === 'report') await deleteReport(String(id));
+        if (type === 'inventory') await deleteInventoryItem(Number(id));
+        if (type === 'injury') await deleteInjuryCase(Number(id));
+        if (type === 'user') await deleteUser(String(id));
         
         alert(t('deletedSuccessfully'));
         loadData();
-        if (showDetail?.id === id) setShowDetail(null);
+        if (showDetail != null && String(showDetail.id) === String(id)) setShowDetail(null);
         if (showInjuryDetail?.id === id) setShowInjuryDetail(null);
     };
 
@@ -155,29 +182,145 @@ const Admin: React.FC = () => {
         setShowForm(type as any);
     };
 
-    const handleApproveReport = async (id: number) => {
-        if (!can('approve', 'report')) { alert(t('permissionDenied')); return; }
-        await updateReportStatus(id, 'approved');
+    /** ACCEPT (Report_UI_Layout.md): move to Active / in progress */
+    const handleAcceptReport = async (id: string, note?: string) => {
+        if (!can('approve', 'report')) {
+            alert(t('permissionDenied'));
+            throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        }
+        const messageForReporter = note?.trim() ? note.trim() : t('defaultActiveTeamOnTheWayMessage');
+        await updateReportStatus(id, 'active', messageForReporter);
         loadData();
-        if (showDetail?.id === id) setShowDetail(prev => prev ? ({ ...prev, status: 'approved' }) : null);
+        if (showDetail != null && String(showDetail.id) === String(id)) {
+            setShowDetail(prev => prev ? ({
+                ...prev,
+                status: 'active',
+                adminNotes: messageForReporter,
+            }) : null);
+        }
     };
 
-    const handleRequestInfo = async (id: number) => {
+    /** DELAY: keep in incoming queue, marked as waiting */
+    const handleDelayReport = async (id: string, note?: string) => {
+        if (!can('approve', 'report')) {
+            alert(t('permissionDenied'));
+            throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        }
+        await updateReportStatus(id, 'delayed', note);
+        loadData();
+        if (showDetail != null && String(showDetail.id) === String(id)) {
+            setShowDetail(prev => prev ? ({
+                ...prev,
+                status: 'delayed',
+                ...(note ? { adminNotes: note } : {}),
+            }) : null);
+        }
+    };
+
+    /** PENDING: keep in incoming queue */
+    const handlePendingReport = async (id: string, note?: string) => {
+        if (!can('approve', 'report')) {
+            alert(t('permissionDenied'));
+            throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        }
+        await updateReportStatus(id, 'pending', note);
+        loadData();
+        if (showDetail != null && String(showDetail.id) === String(id)) {
+            setShowDetail(prev => prev ? ({
+                ...prev,
+                status: 'pending',
+                ...(note ? { adminNotes: note } : {}),
+            }) : null);
+        }
+    };
+
+    /** REJECT: invalid / duplicate — moves to History */
+    const handleRejectReport = async (id: string, note?: string) => {
+        if (!can('approve', 'report')) {
+            alert(t('permissionDenied'));
+            throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        }
+        if (!window.confirm(t('rejectReportConfirm'))) {
+            throw new DOMException('User cancelled reject', 'AbortError');
+        }
+        await updateReportStatus(id, 'rejected', note);
+        loadData();
+        if (showDetail != null && String(showDetail.id) === String(id)) {
+            setShowDetail(prev => prev ? ({
+                ...prev,
+                status: 'rejected',
+                ...(note ? { adminNotes: note } : {}),
+            }) : null);
+        }
+    };
+
+    const handleProgressReport = async (
+        id: string,
+        step: ReportProgressStep,
+        note?: string
+    ) => {
+        if (!can('approve', 'report')) {
+            alert(t('permissionDenied'));
+            throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        }
+        const n = note?.trim() ? note.trim() : undefined;
+        let nextStatus: IncidentReport['status'] = 'resolved';
+        if (step === 'en_route') nextStatus = 'en_route';
+        else if (step === 'on_scene') nextStatus = 'on_scene';
+        await updateReportStatus(id, nextStatus, n);
+        loadData();
+        if (showDetail != null && String(showDetail.id) === String(id)) {
+            setShowDetail(prev =>
+                prev
+                    ? {
+                          ...prev,
+                          status: nextStatus,
+                          ...(n != null ? { adminNotes: n } : {}),
+                      }
+                    : null
+            );
+        }
+    };
+
+    const handleReopenReport = async (id: string, note?: string) => {
+        if (!can('approve', 'report')) {
+            alert(t('permissionDenied'));
+            throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+        }
+        const messageForReporter = note?.trim()
+            ? note.trim()
+            : t('defaultActiveTeamOnTheWayMessage');
+        await updateReportStatus(id, 'active', messageForReporter);
+        loadData();
+        if (showDetail != null && String(showDetail.id) === String(id)) {
+            setShowDetail(prev =>
+                prev
+                    ? {
+                          ...prev,
+                          status: 'active',
+                          adminNotes: messageForReporter,
+                      }
+                    : null
+            );
+        }
+    };
+
+    const handleRequestInfo = async (id: string) => {
         if (!can('request_info', 'report')) { alert(t('permissionDenied')); return; }
         const note = prompt("What information is missing?");
         if (note) {
             await updateReportStatus(id, 'info_requested', note);
             loadData();
-            if (showDetail?.id === id) setShowDetail(prev => prev ? ({ ...prev, status: 'info_requested', adminNotes: note }) : null);
+            if (showDetail != null && String(showDetail.id) === String(id)) setShowDetail(prev => prev ? ({ ...prev, status: 'info_requested', adminNotes: note }) : null);
         }
     };
 
-    const handleArchiveReport = async (id: number) => {
+    const handleArchiveReport = async (id: string) => {
          if (!can('archive', 'report')) { alert(t('permissionDenied')); return; }
          if (window.confirm(t('markResolvedArchive'))) {
             await updateReportStatus(id, 'resolved');
             loadData();
-            if (showDetail?.id === id) setShowDetail(prev => prev ? ({ ...prev, status: 'resolved' }) : null);
+            if (showDetail != null && String(showDetail.id) === String(id)) setShowDetail(prev => prev ? ({ ...prev, status: 'resolved' }) : null);
          }
     };
 
@@ -243,9 +386,9 @@ const Admin: React.FC = () => {
 
     // Filter Logic for Reports
     const filteredReports = reports.filter(r => {
-        const isResolved = r.status === 'resolved';
-        if (viewHistory && !isResolved) return false;
-        if (!viewHistory && isResolved) return false;
+        const isHistoryStatus = r.status === 'resolved' || r.status === 'rejected';
+        if (viewHistory && !isHistoryStatus) return false;
+        if (!viewHistory && isHistoryStatus) return false;
 
         const matchesStatus = filterStatus === 'all' || r.status === filterStatus;
         const matchesType = filterType === 'all' || r.type === filterType;
@@ -265,10 +408,16 @@ const Admin: React.FC = () => {
     // --- Components ---
 
     const ActionButtons = ({ item, type }: { item: any, type: ContextType }) => (
-        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
+        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100 flex-wrap">
             {can('edit', type) && (
-                <button onClick={(e) => { e.stopPropagation(); handleEdit(item, type); }} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={t('editButton')}>
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleEdit(item, type); }}
+                    className={`flex items-center gap-1.5 p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors ${type === 'report' ? 'px-3 font-bold text-sm text-blue-700' : ''}`}
+                    title={type === 'report' ? t('editReport') : t('editButton')}
+                >
                     <Icons.Edit size={16} />
+                    {type === 'report' && <span>{t('editReport')}</span>}
                 </button>
             )}
             {can('delete', type) && (
@@ -285,12 +434,27 @@ const Admin: React.FC = () => {
 
     const StatusIcon = ({ status }: { status: string }) => {
         switch (status) {
-            case 'approved': return <div title={t('approvedAction')} className="p-1 rounded-full bg-green-100 text-green-600"><Icons.CheckCircle size={14} /></div>;
+            // Backward compatibility: treat "approved" as in-progress.
+            case 'approved': return <div title={t('activeAction')} className="p-1 rounded-full bg-blue-100 text-blue-600"><Icons.Activity size={14} /></div>;
+            case 'en_route': return <div title={t('statusEnRoute')} className="p-1 rounded-full bg-sky-100 text-sky-700"><Icons.Navigation size={14} /></div>;
+            case 'on_scene': return <div title={t('statusOnScene')} className="p-1 rounded-full bg-indigo-100 text-indigo-700"><Icons.MapPin size={14} /></div>;
             case 'resolved': return <div title={t('resolvedAction')} className="p-1 rounded-full bg-gray-100 text-gray-500"><Icons.Archive size={14} /></div>;
+            case 'rejected': return <div title={t('rejectedStatus')} className="p-1 rounded-full bg-red-100 text-red-600"><Icons.X size={14} /></div>;
+            case 'delayed': return <div title={t('delayedStatus')} className="p-1 rounded-full bg-amber-100 text-amber-700"><Icons.Clock size={14} /></div>;
             case 'info_requested': return <div title={t('infoRequestedAction')} className="p-1 rounded-full bg-yellow-100 text-yellow-600"><Icons.HelpCircle size={14} /></div>;
             case 'active': return <div title={t('activeAction')} className="p-1 rounded-full bg-blue-100 text-blue-600"><Icons.Activity size={14} /></div>;
             default: return <div title={t('pendingAction')} className="p-1 rounded-full bg-gray-100 text-gray-400"><Icons.Clock size={14} /></div>;
         }
+    };
+
+    const isActiveLikeStatus = (status: string | undefined) => {
+        const s = (status || '').toLowerCase();
+        return (
+            s === 'active' ||
+            s === 'approved' ||
+            s === 'en_route' ||
+            s === 'on_scene'
+        );
     };
 
     const getRoleBadgeStyle = (role: string) => {
@@ -409,6 +573,10 @@ const Admin: React.FC = () => {
                                     <option value="active">{t('active')}</option>
                                     <option value="approved">{t('approvedStatus')}</option>
                                     <option value="info_requested">{t('infoRequestedShort')}</option>
+                                    <option value="delayed">{t('delayedStatus')}</option>
+                                    <option value="en_route">{t('statusEnRoute')}</option>
+                                    <option value="on_scene">{t('statusOnScene')}</option>
+                                    <option value="rejected">{t('rejectedStatus')}</option>
                                     <option value="resolved">{t('resolvedStatus')}</option>
                                 </select>
                             </div>
@@ -556,7 +724,7 @@ const Admin: React.FC = () => {
                         </div>
                         <div className="p-6 overflow-y-auto">
                             <div className="flex justify-between items-center mb-4">
-                                <div className="flex items-center gap-2"><span className="text-xs font-bold text-gray-500">{showDetail.timestamp}</span>{showDetail.status === 'resolved' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded font-bold">ARCHIVED</span>}</div>
+                                <div className="flex items-center gap-2 flex-wrap"><span className="text-xs font-bold text-gray-500">{showDetail.timestamp}</span>{showDetail.status === 'resolved' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded font-bold">ARCHIVED</span>}{showDetail.status === 'rejected' && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold uppercase">{t('rejectedStatus')}</span>}</div>
                                 {(currentUser?.role === 'Admin' || currentUser?.role === 'Responder') && (
                                     <button onClick={() => { if (isEditingDetail) handleSaveDetail(); else setIsEditingDetail(true); }} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors min-h-[36px] ${isEditingDetail ? 'bg-black text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{isEditingDetail ? t('saveChanges') : t('editDetails')}</button>
                                 )}
@@ -573,11 +741,19 @@ const Admin: React.FC = () => {
                                     </div>
                                     
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('urgencyLabel')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.urgency} onChange={e => setEditData({...editData, urgency: e.target.value as any})}><option value="Low">{t('low')}</option><option value="Medium">{t('moderate')}</option><option value="High">{t('high')}</option><option value="Critical">{t('criticalSeverity')}</option></select></div><div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('incidentLocation')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.department} onChange={e => setEditData({...editData, department: e.target.value})}><option value="Main Building">{t('mainBuilding')}</option><option value="Office">{t('office')}</option><option value="Company Compound">{t('companyCompound')}</option><option value="Warehouse">{t('warehouse')}</option><option value="Workshop">{t('workshop')}</option><option value="Parking Lot">{t('parkingLot')}</option><option value="Factory">{t('factory')}</option><option value="Construction Site">{t('constructionSite')}</option><option value="School">{t('school')}</option><option value="City Centre">{t('cityCentre')}</option><option value="Highway">{t('highway')}</option><option value="Airport">{t('airport')}</option><option value="Urban Area">{t('urbanArea')}</option><option value="Rural Area">{t('ruralArea')}</option><option value="Other">{t('other')}</option></select></div></div>
-                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('status')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})}><option value="pending">{t('pendingStatus')}</option><option value="active">{t('active')}</option><option value="approved">{t('approvedStatus')}</option><option value="info_requested">{t('infoRequestedStatus')}</option><option value="resolved">{t('resolvedStatus')}</option></select></div>
+                                    <div><label className="text-[11px] sm:text-xs font-bold text-gray-500 uppercase">{t('status')}</label><select className="w-full p-2.5 rounded border text-sm bg-white" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value as any})}><option value="pending">{t('pendingStatus')}</option><option value="active">{t('active')}</option><option value="approved">{t('approvedStatus')}</option><option value="info_requested">{t('infoRequestedStatus')}</option><option value="delayed">{t('delayedStatus')}</option><option value="en_route">{t('statusEnRoute')}</option><option value="on_scene">{t('statusOnScene')}</option><option value="rejected">{t('rejectedStatus')}</option><option value="resolved">{t('resolvedStatus')}</option></select></div>
                                 </div>
                             ) : (
                                 <>
                                     <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold uppercase text-blue-600 bg-blue-50 px-2 py-1 rounded">{showDetail.type}</span><StatusIcon status={showDetail.status} /></div>
+                                    {isActiveLikeStatus(showDetail.status) && (
+                                        <div className="mb-3 rounded-xl border border-green-200 bg-green-50 p-3">
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-green-800">{t('responderUpdateHeading')}</p>
+                                            <p className="mt-1 text-sm font-medium leading-snug text-green-900">
+                                                {(showDetail.adminNotes || '').trim() || t('defaultActiveTeamOnTheWayMessage')}
+                                            </p>
+                                        </div>
+                                    )}
                                     <h2 className="text-xl font-bold mb-4 leading-tight">{translateDescription(showDetail.description)}</h2>
                                     <div className="space-y-4 mb-6 text-sm text-gray-700">
                                         <div className="bg-gray-50 p-3 rounded-lg flex flex-col sm:flex-row sm:justify-between gap-1 border border-gray-100"><span>{t('urgencyLabel')}: <strong className={showDetail.urgency === 'Critical' ? 'text-red-600' : ''}>{showDetail.urgency}</strong></span><span>{t('incidentLocation')}: <strong>{showDetail.department}</strong></span></div>
@@ -595,12 +771,33 @@ const Admin: React.FC = () => {
                                 </>
                             )}
                             <div className="flex flex-col gap-3 mb-6">
+                                {can('approve', 'report') && (
+                                    <ReportTriageBarV2
+                                        status={showDetail.status}
+                                        onTriage={async (action, note) => {
+                                            const id = showDetail.id;
+                                            if (action === 'accept')
+                                                await handleAcceptReport(id, note);
+                                            else if (action === 'delay')
+                                                await handleDelayReport(id, note);
+                                            else if (action === 'pending')
+                                                await handlePendingReport(id, note);
+                                            else await handleRejectReport(id, note);
+                                        }}
+                                        onProgress={async (step, note) => {
+                                            await handleProgressReport(
+                                                showDetail.id,
+                                                step,
+                                                note
+                                            );
+                                        }}
+                                    />
+                                )}
                                 <div className="flex gap-2">
-                                    {can('approve', 'report') && showDetail.status !== 'approved' && showDetail.status !== 'resolved' && <button onClick={() => handleApproveReport(showDetail.id)} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm hover:bg-green-700 shadow-lg flex items-center justify-center gap-2 min-h-[44px]"><Icons.CheckCircle size={18} /> {t('approveBtn')}</button>}
-                                    {can('request_info', 'report') && showDetail.status !== 'resolved' && <button onClick={() => handleRequestInfo(showDetail.id)} className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold text-sm hover:bg-yellow-600 shadow-lg flex items-center justify-center gap-2 min-h-[44px]"><Icons.HelpCircle size={18} /> {t('requestInfoBtn')}</button>}
+                                    {can('request_info', 'report') && showDetail.status !== 'resolved' && showDetail.status !== 'rejected' && <button type="button" onClick={() => handleRequestInfo(showDetail.id)} className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold text-sm hover:bg-yellow-600 shadow-lg flex items-center justify-center gap-2 min-h-[44px]"><Icons.HelpCircle size={18} /> {t('requestInfoBtn')}</button>}
                                 </div>
                                 {/* Archive/Resolve Button */}
-                                {can('archive', 'report') && showDetail.status !== 'resolved' && (
+                                {can('archive', 'report') && showDetail.status !== 'resolved' && showDetail.status !== 'rejected' && (
                                     <button onClick={() => handleArchiveReport(showDetail.id)} className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold text-sm hover:bg-black shadow-lg flex items-center justify-center gap-2 min-h-[44px]">
                                         <Icons.Archive size={18} /> {t('resolveArchive')}
                                     </button>
@@ -635,10 +832,22 @@ const Admin: React.FC = () => {
                     <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center relative shadow-2xl">
                         <button onClick={() => setShowQR(null)} className="absolute top-4 right-4 p-1 hover:bg-gray-100 rounded-full"><Icons.X size={20} /></button>
                         <h3 className="font-bold text-lg mb-4">{t('scanQrCode')}</h3>
-                        <div className="bg-white border-2 border-gray-100 p-4 rounded-xl inline-block mb-4 shadow-inner"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(JSON.stringify({id: showQR.id, type: showQR.typeLabel}))}`} alt="QR" className="w-48 h-48 mix-blend-multiply" /></div>
+                        <div className="bg-white border-2 border-gray-100 p-4 rounded-xl inline-block mb-4 shadow-inner">
+                            <img
+                                src={buildAdminQrUrl(showQR, 200)}
+                                alt=""
+                                className="w-48 h-48 mix-blend-multiply"
+                            />
+                        </div>
                         <p className="text-sm font-bold">{showQR.name || showQR.type || showQR.item}</p>
                         <p className="text-xs text-gray-500 mb-6">ID: #{showQR.id}</p>
-                        <button className="w-full py-3 bg-black text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800"><Icons.Download size={18} /> Download</button>
+                        <button
+                            type="button"
+                            onClick={() => void handleDownloadAdminQr(showQR)}
+                            className="w-full py-3 bg-black text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-gray-800 cursor-pointer"
+                        >
+                            <Icons.Download size={18} /> Download
+                        </button>
                     </div>
                 </div>
             )}

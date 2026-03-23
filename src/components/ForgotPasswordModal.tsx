@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { Icons } from './Icon';
-import { requestPasswordReset, resetPasswordWithCode } from '../services/api';
+import { getAuthCaptchaConfig } from '../config/authCaptcha';
 import { COUNTRY_CODES } from '../constants';
+import { requestPasswordReset, resetPasswordWithCode } from '../services/api';
+import { isDemoUser } from '../services/auth';
+import { isSupabaseReady } from '../services/supabase';
+import { AuthCaptcha } from './AuthCaptcha';
+import { Icons } from './Icon';
 
 type Step = 'method' | 'request' | 'verify' | 'link_sent' | 'success';
 
@@ -28,6 +32,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [resetCaptchaToken, setResetCaptchaToken] = useState<string | null>(null);
+    const [resetCaptchaKey, setResetCaptchaKey] = useState(0);
 
     const resetForm = () => {
         setStep('method');
@@ -39,6 +45,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
         setNewPassword('');
         setConfirmPassword('');
         setMessage(null);
+        setResetCaptchaToken(null);
+        setResetCaptchaKey(0);
     };
 
     const handleClose = () => {
@@ -54,11 +62,30 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
             setMessage({ type: 'error', text: method === 'email' ? 'Please enter your email.' : 'Please enter your phone number.' });
             return;
         }
+        const emailTrim = email.trim();
+        if (
+            method === 'email' &&
+            isSupabaseReady() &&
+            !isDemoUser(emailTrim) &&
+            getAuthCaptchaConfig() &&
+            !resetCaptchaToken?.trim()
+        ) {
+            setMessage({ type: 'error', text: 'Please complete the security check below.' });
+            return;
+        }
         setLoading(true);
         try {
-            const result = await requestPasswordReset(method, value);
+            const result = await requestPasswordReset(
+                method,
+                value,
+                method === 'email' ? resetCaptchaToken : undefined
+            );
             if (result.success) {
                 setMessage({ type: 'success', text: result.message });
+                if (result.linkSent) {
+                    setResetCaptchaKey((k) => k + 1);
+                    setResetCaptchaToken(null);
+                }
                 setStep(result.linkSent ? 'link_sent' : 'verify');
             } else {
                 setMessage({ type: 'error', text: result.message });
@@ -115,7 +142,13 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                             <p className="text-sm text-gray-500 mb-4">Choose how you'd like to reset your password:</p>
                             <div className="space-y-3">
                                 <button
-                                    onClick={() => { setMethod('email'); setStep('request'); setMessage(null); }}
+                                    onClick={() => {
+                                        setMethod('email');
+                                        setStep('request');
+                                        setMessage(null);
+                                        setResetCaptchaToken(null);
+                                        setResetCaptchaKey((k) => k + 1);
+                                    }}
                                     className="w-full flex items-center gap-3 p-4 border border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/50 transition-colors text-left"
                                 >
                                     <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -123,11 +156,17 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                                     </div>
                                     <div>
                                         <p className="font-semibold text-gray-900">Reset via Email</p>
-                                        <p className="text-xs text-gray-500">Receive a code at your email address</p>
+                                        <p className="text-xs text-gray-500">Receive a reset link by email (Supabase accounts)</p>
                                     </div>
                                 </button>
                                 <button
-                                    onClick={() => { setMethod('sms'); setStep('request'); setMessage(null); }}
+                                    onClick={() => {
+                                        setMethod('sms');
+                                        setStep('request');
+                                        setMessage(null);
+                                        setResetCaptchaToken(null);
+                                        setResetCaptchaKey((k) => k + 1);
+                                    }}
                                     className="w-full flex items-center gap-3 p-4 border border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/50 transition-colors text-left"
                                 >
                                     <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -148,20 +187,29 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                                 <Icons.ArrowLeft size={14} /> Back
                             </button>
                             {method === 'email' ? (
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Address</label>
-                                    <div className="relative">
-                                        <Icons.Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                        <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
-                                            placeholder="you@example.com"
-                                            autoFocus
-                                        />
+                                <>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Address</label>
+                                        <div className="relative">
+                                            <Icons.Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                            <input
+                                                type="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 bg-white"
+                                                placeholder="you@example.com"
+                                                autoFocus
+                                            />
+                                        </div>
                                     </div>
-                                </div>
+                                    {isSupabaseReady() && !isDemoUser(email.trim()) ? (
+                                        <AuthCaptcha
+                                            key={resetCaptchaKey}
+                                            onToken={setResetCaptchaToken}
+                                            className="flex justify-center min-h-[68px]"
+                                        />
+                                    ) : null}
+                                </>
                             ) : (
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Phone Number</label>

@@ -1,14 +1,33 @@
 
 import { MOCK_ALERTS, MOCK_CHECKLIST, MOCK_DRILLS, MOCK_INJURIES, MOCK_INVENTORY, MOCK_LEARN_ITEMS, MOCK_REPORTS, MOCK_RESOURCES, MOCK_TUTORIALS, MOCK_USER } from '../constants';
-import type { Alert, ChecklistItem, DrillSession, IncidentReport, InjuryCase, InventoryItem, LearnItem, Resource, Tutorial, User, EarthquakeEvent, SafetyAsset } from '../types';
+import type { Alert, ChecklistItem, DrillComment, DrillReaction, DrillSession, IncidentReport, InjuryCase, InventoryItem, LearnItem, Resource, Tutorial, User, EarthquakeEvent, SafetyAsset } from '../types';
 import { supabase, isSupabaseReady } from './supabase';
-import { isDemoUser, signInWithSupabase, signUpWithSupabase, verifyEmailOtp, resendSignUpConfirmation } from './auth';
+import {
+    isDemoUser,
+    signInWithSupabase,
+    signUpWithSupabase,
+    verifyEmailOtp,
+    resendSignUpConfirmation,
+    sendPasswordResetEmail,
+} from './auth';
+import { enqueueOfflineAction, isOfflineQueueSuppressed } from './offlineQueue';
+import { getAuthCaptchaConfig } from '../config/authCaptcha';
 
 const USE_MOCK_DATA = true; // Set to false to use PHP Backend
 const API_URL = 'https://safesphere.app/api/api.php';
 
 /** True when online and Supabase is configured - use Supabase for storage */
 const useSupabase = (): boolean => typeof navigator !== 'undefined' && navigator.onLine && isSupabaseReady();
+
+/** True when current user is a demo user (Admin/Responder/Reporter) - use localStorage only for shared data */
+const isUsingDemoUser = (): boolean => {
+    try {
+        const saved = localStorage.getItem('safesphere_user');
+        if (!saved) return false;
+        const user = JSON.parse(saved);
+        return user?.email && isDemoUser(user.email);
+    } catch { return false; }
+};
 
 // Offline storage helper
 const getCached = <T>(key: string): T | null => {
@@ -29,6 +48,23 @@ const setCached = <T>(key: string, data: T): void => {
     }
 };
 
+// Demo-only deterministic report IDs for predictable local submissions (string ids match IncidentReport).
+const DEMO_REPORT_SEQ_KEY = 'safesphere_demo_report_seq';
+function nextDemoReportId(): string {
+    const raw = localStorage.getItem(DEMO_REPORT_SEQ_KEY);
+    const parsed = raw ? Number(raw) : 0;
+    const current = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    localStorage.setItem(DEMO_REPORT_SEQ_KEY, String(current + 1));
+    return String(current);
+}
+
+function newLocalUserId(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // --- USER MANAGEMENT ---
 
 export const fetchUser = async (): Promise<User> => {
@@ -43,13 +79,39 @@ export const fetchUser = async (): Promise<User> => {
 };
 
 const USERS_CACHE_KEY = 'safesphere_users_list_v3';
-const RESOURCES_CACHE_KEY = 'safesphere_resources_v3_peoples_park'; // Bumped: Community Relief/Center at People's Park
+const RESOURCES_CACHE_KEY = 'safesphere_resources_v6_global_demo'; // Bumped when mock list changes; legacy US rows also stripped in fetchResources
+/** Older builds / Supabase seeds that cached US demo facilities */
+const LEGACY_RESOURCE_CACHE_KEYS = ['safesphere_resources_v3_peoples_park', 'safesphere_resources_v4_yangon_mmr'] as const;
+
+/**
+ * Detect stale US demo resources (old app seeds or Supabase fixtures). SafeSphere targets Yangon — replace with MOCK_RESOURCES.
+ */
+function shouldReplaceResourcesWithYangonMock(resources: Resource[]): boolean {
+    if (!resources?.length) return false;
+    for (const r of resources) {
+        const addr = (r.address || '').toLowerCase();
+        const name = (r.name || '').toLowerCase();
+        const phone = r.phone || '';
+        if (addr.includes('123 health') || addr.includes('safety blvd') || addr.includes('rescue road')) return true;
+        if (addr.includes('medical district') || addr.includes('fire district') || addr.includes('government quarter')) return true;
+        if (name.includes('fire station #4')) return true;
+        if (name.includes('city general hospital') && (addr.includes('health st') || /555-0\d{3}/.test(phone))) return true;
+        if (phone.includes('(555)') || /\b555-0\d{3}\b/.test(phone)) {
+            if (r.lat >= 20 && r.lat <= 55 && r.lng <= -50 && r.lng >= -130) return true;
+        }
+        if (phone.includes('911 /') && r.lng < 0) return true;
+    }
+    const usLike = resources.filter(
+        (r) => r.lat >= 24 && r.lat <= 50 && r.lng <= -65 && r.lng >= -125
+    );
+    return usLike.length === resources.length && resources.length >= 2;
+}
 
 /** Demo login credentials — three roles only: Admin, Responder, Reporter. Passwords for test use only (see README). */
 export const DEMO_CREDENTIALS: Array<{ email: string; password: string; user: User }> = [
-    { email: 'admin@safesphere.app', password: '20Admin#26!', user: { id: 1, name: 'Admin', role: 'Admin', safetyScore: 85, xp: 450, email: 'admin@safesphere.app', phone: '+1 555 0123', skills: ['Leadership', 'First Aid'], bloodType: 'O+', volunteerPoints: 120, permissions: ['approve_reports', 'manage_users', 'edit_resources'] } },
-    { email: 'responder@safesphere.app', password: '20Responder#26!', user: { id: 2, name: 'Responder', role: 'Responder', safetyScore: 90, xp: 1200, email: 'responder@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, permissions: ['approve_reports'] } },
-    { email: 'reporter@safesphere.app', password: '20Reporter#26!', user: { id: 3, name: 'Reporter', role: 'Reporter', safetyScore: 75, xp: 300, email: 'reporter@safesphere.app', skills: ['Driving'], bloodType: 'B+', volunteerPoints: 85, permissions: [] } },
+    { email: 'admin@safesphere.app', password: '20Admin#26!', user: { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Admin', role: 'Admin', safetyScore: 85, xp: 450, email: 'admin@safesphere.app', phone: '+1 555 0123', skills: ['Leadership', 'First Aid'], bloodType: 'O+', volunteerPoints: 120, permissions: ['approve_reports', 'manage_users', 'edit_resources'] } },
+    { email: 'responder@safesphere.app', password: '20Responder#26!', user: { id: '550e8400-e29b-41d4-a716-446655440002', name: 'Responder', role: 'Responder', safetyScore: 90, xp: 1200, email: 'responder@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, permissions: ['approve_reports'] } },
+    { email: 'reporter@safesphere.app', password: '20Reporter#26!', user: { id: '550e8400-e29b-41d4-a716-446655440003', name: 'Reporter', role: 'Reporter', safetyScore: 75, xp: 300, email: 'reporter@safesphere.app', skills: ['Driving'], bloodType: 'B+', volunteerPoints: 85, permissions: [] } },
 ];
 
 /** Authenticate by email and password. Demo users: mock auth. Real users: Supabase Auth (may return requiresMfa). */
@@ -65,11 +127,13 @@ export const authenticate = async (
     }
     if (isSupabaseReady()) {
         const result = await signInWithSupabase(email, password);
-        if (result.success && 'requiresMfa' in result) {
-            return { success: true, user: result.user, requiresMfa: result.requiresMfa };
+        if (result.success === false) {
+            return { success: false, message: result.message };
         }
-        if (result.success) return { success: true, user: result.user };
-        return { success: false, message: result.message };
+        if ('requiresMfa' in result && result.requiresMfa) {
+            return { success: true, user: result.user, requiresMfa: true };
+        }
+        return { success: true, user: result.user };
     }
     return { success: false, message: 'Invalid email or password.' };
 };
@@ -80,8 +144,8 @@ export const fetchAllUsers = async (): Promise<User[]> => {
 
     const mockUsers: User[] = [
         ...DEMO_CREDENTIALS.map(c => ({ ...c.user, password: c.password })),
-        { id: 5, name: 'Sarah Connor', role: 'Responder', safetyScore: 90, xp: 1200, email: 'sarah@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, password: 'Sarah123!', permissions: ['approve_reports'] },
-        { id: 6, name: 'Christina', role: 'Reporter', safetyScore: 60, xp: 150, email: 'christina@safesphere.app', phone: '555-0102', bloodType: 'AB+', volunteerPoints: 45, password: 'Christina123!', permissions: [] }
+        { id: '550e8400-e29b-41d4-a716-446655440005', name: 'Christina Chen', role: 'Responder', safetyScore: 90, xp: 1200, email: 'christina.chen@safesphere.app', phone: '555-0101', skills: ['CPR', 'Search & Rescue'], bloodType: 'O-', volunteerPoints: 340, password: 'Christina123!', permissions: ['approve_reports'] },
+        { id: '550e8400-e29b-41d4-a716-446655440006', name: 'Christina', role: 'Reporter', safetyScore: 60, xp: 150, email: 'christina@safesphere.app', phone: '555-0102', bloodType: 'AB+', volunteerPoints: 45, password: 'Christina123!', permissions: [] }
     ];
     setCached(USERS_CACHE_KEY, mockUsers);
     return Promise.resolve(mockUsers);
@@ -94,7 +158,7 @@ export const saveUser = async (user: Partial<User>): Promise<boolean> => {
         updatedUsers = users.map(u => u.id === user.id ? { ...u, ...user } : u);
     } else {
         const newUser: User = {
-            id: Date.now(),
+            id: newLocalUserId(),
             name: user.name || 'New User',
             role: user.role || 'Reporter',
             safetyScore: 0,
@@ -116,7 +180,7 @@ export const saveUser = async (user: Partial<User>): Promise<boolean> => {
     return Promise.resolve(true);
 };
 
-export const deleteUser = async (id: number): Promise<boolean> => {
+export const deleteUser = async (id: string): Promise<boolean> => {
     const users = await fetchAllUsers();
     setCached(USERS_CACHE_KEY, users.filter(u => u.id !== id));
     return Promise.resolve(true);
@@ -127,8 +191,32 @@ export const deleteUser = async (id: number): Promise<boolean> => {
 const RESET_CODE_KEY = 'safesphere_reset_code';
 const RESET_CODE_EXPIRY = 10 * 60 * 1000; // 10 minutes
 
-/** Request password reset - sends code to email or phone. Returns success message. */
-export const requestPasswordReset = async (method: 'email' | 'sms', value: string): Promise<{ success: boolean; message: string }> => {
+/** Request password reset - Supabase users get a magic link email; demo/local users get a cached 6-digit code. */
+export const requestPasswordReset = async (
+    method: 'email' | 'sms',
+    value: string,
+    captchaToken?: string | null
+): Promise<{ success: boolean; message: string; linkSent?: boolean }> => {
+    const trimmedEmail = value.trim();
+    if (method === 'email' && isSupabaseReady() && !isDemoUser(trimmedEmail)) {
+        const supa = await sendPasswordResetEmail(trimmedEmail, captchaToken);
+        if (supa.success) {
+            return {
+                success: true,
+                message:
+                    `If an account exists for ${trimmedEmail}, we have sent a password reset link. Open that email and follow the link to set a new password. Check your spam folder.`,
+                linkSent: true,
+            };
+        }
+        const resetFail =
+            supa.message || 'Could not send reset email. Check Supabase Auth email (SMTP) settings.';
+        const resetHint =
+            typeof window !== 'undefined'
+                ? ` Ensure "${window.location.origin}/" is in Authentication → URL Configuration → Redirect URLs.`
+                : '';
+        return { success: false, message: `${resetFail}${resetHint}` };
+    }
+
     const users = await fetchAllUsers();
     const normalizedValue = value.trim().toLowerCase();
 
@@ -160,12 +248,13 @@ export const requestPasswordReset = async (method: 'email' | 'sms', value: strin
         message: method === 'email'
             ? `A 6-digit code has been sent to ${user.email}. Check your inbox.`
             : `A 6-digit code has been sent to ${user.phone}. Check your messages.`,
+        linkSent: false,
     };
 };
 
 /** Verify code and reset password */
 export const resetPasswordWithCode = async (code: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
-    const stored = getCached<{ code: string; userId: number; expiresAt: number }>(RESET_CODE_KEY);
+    const stored = getCached<{ code: string; userId: string; expiresAt: number }>(RESET_CODE_KEY);
     if (!stored) return { success: false, message: 'No reset request found. Please request a new code.' };
     if (Date.now() > stored.expiresAt) return { success: false, message: 'Code has expired. Please request a new code.' };
     if (stored.code !== code.trim()) return { success: false, message: 'Invalid code. Please try again.' };
@@ -195,6 +284,20 @@ export interface PendingRegistration {
 
 const PENDING_REG_KEY = 'safesphere_pending_registrations';
 
+function isCaptchaRelatedAuthMessage(msg: string | null | undefined): boolean {
+    if (!msg) return false;
+    return /captcha|hcaptcha|turnstile|bot protection|challenge|sitekey|secret.?mismatch|request disallowed/i.test(
+        msg
+    );
+}
+
+function isCaptchaSiteSecretMismatchMessage(msg: string | null | undefined): boolean {
+    if (!msg) return false;
+    return /sitekey[\s_-]*secret[\s_-]*mismatch/i.test(msg);
+}
+
+export type SignUpEmailIssueKind = 'captcha' | 'captcha_mismatch' | 'smtp' | 'config';
+
 /** Request a new account — creates user in Supabase Auth (email confirmation) + optional SMS. */
 export const requestAccount = async (data: {
     firstName: string;
@@ -203,7 +306,16 @@ export const requestAccount = async (data: {
     email: string;
     phone: string;
     password: string;
-}): Promise<{ success: boolean; message: string }> => {
+    captchaToken?: string | null;
+}): Promise<{
+    success: boolean;
+    message: string;
+    emailDeliveryHint?: string | null;
+    /** Why the confirmation email path failed — drives accurate UI copy (captcha ≠ SMTP). */
+    signUpEmailIssueKind?: SignUpEmailIssueKind | null;
+    registrationComplete?: boolean;
+    registeredUser?: User;
+}> => {
     const users = await fetchAllUsers();
     const emailNorm = data.email.trim().toLowerCase();
     if (users.some(u => u.email?.toLowerCase() === emailNorm)) {
@@ -221,9 +333,78 @@ export const requestAccount = async (data: {
         return { success: false, message: 'Please enter your phone number (with country code).' };
     }
 
-    // Generate a 6-digit code (used for local fallback + optional SMS)
-    const token = String(Math.floor(100000 + Math.random() * 900000));
+    // Local fallback code only when Supabase sign-up fails (must match Resend Edge Function body)
+    const fallbackToken = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
+    // ── PRIMARY: Supabase Auth signUp (sends confirmation email with *its* OTP when enabled) ──
+    let supabaseSignupOk = false;
+    let signUpErrorMessage: string | null = null;
+    if (isSupabaseReady()) {
+        const fullName = `${data.firstName.trim()} ${data.lastName.trim()}`.trim();
+        const signUpResult = await signUpWithSupabase(
+            data.email.trim(),
+            data.password,
+            {
+                name: fullName,
+                role: 'Reporter',
+                phone: phoneTrim,
+            },
+            data.captchaToken
+        );
+        if (signUpResult.success === false) {
+            const failMsg = signUpResult.message;
+            signUpErrorMessage = failMsg;
+            if (import.meta.env.DEV) {
+                console.warn('[Auth] Supabase signUp error:', failMsg);
+            }
+            if (failMsg.includes('already registered') || failMsg.includes('already been registered')) {
+                await resendSignUpConfirmation(data.email.trim(), data.captchaToken).catch(() => {});
+                supabaseSignupOk = true;
+                signUpErrorMessage = null;
+            }
+        } else {
+            if (!signUpResult.needsEmailConfirmation) {
+                const users = await fetchAllUsers();
+                const sb = signUpResult.user;
+                const displayName = `${data.firstName.trim()} ${data.lastName.trim()}`.trim() || sb.name;
+                const newUser: User = {
+                    ...sb,
+                    id: sb.id,
+                    name: displayName,
+                    username: data.username.trim(),
+                    phone: data.phone.trim() || sb.phone,
+                    email: data.email.trim(),
+                    password: undefined,
+                };
+                if (!users.some(u => u.id === newUser.id)) {
+                    setCached(USERS_CACHE_KEY, [...users, newUser]);
+                }
+                const allPending = getCached<PendingRegistration[]>(PENDING_REG_KEY) || [];
+                setCached(
+                    PENDING_REG_KEY,
+                    allPending.filter((p) => p.email.toLowerCase() !== emailNorm)
+                );
+                return {
+                    success: true,
+                    message:
+                        'Your account is ready. You are signed in on this device — you can use the app now, or sign out and sign in again anytime.',
+                    emailDeliveryHint: null,
+                    registrationComplete: true,
+                    registeredUser: newUser,
+                };
+            }
+            supabaseSignupOk = true;
+            signUpErrorMessage = null;
+            if (import.meta.env.DEV) {
+                console.log('[Auth] Supabase user created. Email confirmation required:',
+                    signUpResult.needsEmailConfirmation);
+            }
+        }
+    }
+
+    // When Supabase succeeded, do not store a fake local code — it does not match the email OTP.
+    const tokenForPending = supabaseSignupOk ? '' : fallbackToken;
     const pending: PendingRegistration = {
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
@@ -231,7 +412,7 @@ export const requestAccount = async (data: {
         email: data.email.trim(),
         phone: data.phone.trim(),
         password: data.password,
-        token,
+        token: tokenForPending,
         expiresAt,
     };
 
@@ -239,72 +420,101 @@ export const requestAccount = async (data: {
     const filtered = all.filter(p => p.email.toLowerCase() !== emailNorm);
     setCached(PENDING_REG_KEY, [...filtered, pending]);
 
-    // ── PRIMARY: Supabase Auth signUp (triggers built-in confirmation email) ──
-    // This is the main channel. Supabase sends the confirmation email automatically
-    // when "Confirm email" is enabled in Auth → Settings. No Edge Function needed.
-    let supabaseSignupOk = false;
-    if (isSupabaseReady()) {
-        const fullName = `${data.firstName.trim()} ${data.lastName.trim()}`.trim();
-        const signUpResult = await signUpWithSupabase(data.email.trim(), data.password, {
-            name: fullName,
-            role: 'Reporter',
-            phone: phoneTrim,
-        });
-        if (signUpResult.success) {
-            supabaseSignupOk = true;
-            if (import.meta.env.DEV) {
-                console.log('[Auth] Supabase user created. Email confirmation required:',
-                    signUpResult.needsEmailConfirmation);
-            }
-        } else {
-            if (import.meta.env.DEV) {
-                console.warn('[Auth] Supabase signUp error:', signUpResult.message);
-            }
-            // If "User already registered" → they may need to resend confirmation
-            if (signUpResult.message?.includes('already registered') ||
-                signUpResult.message?.includes('already been registered')) {
-                // Try resending the confirmation email
-                await resendSignUpConfirmation(data.email.trim()).catch(() => {});
-                supabaseSignupOk = true; // user exists, email was resent
-            }
-        }
-    }
-
-    // ── OPTIONAL: Branded email via Edge Function (Resend) ──
-    // Only works if send-confirmation-email is deployed and RESEND_API_KEY is set.
-    // Fails silently if not configured — Supabase's built-in email is the primary channel.
+    // Branded 6-digit email via Resend only for *fallback* flow (Supabase sign-up failed)
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-    if (supabaseUrl && anonKey) {
-        // Email (optional branded email via Resend)
+    const skipEdgeFallback =
+        !supabaseSignupOk && isCaptchaRelatedAuthMessage(signUpErrorMessage);
+
+    if (supabaseUrl && anonKey && !supabaseSignupOk && !skipEdgeFallback) {
         try {
             const res = await fetch(`${supabaseUrl}/functions/v1/send-confirmation-email`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${anonKey}`,
+                    Authorization: `Bearer ${anonKey}`,
                 },
-                body: JSON.stringify({ email: data.email.trim(), code: token }),
+                body: JSON.stringify({ email: data.email.trim(), code: fallbackToken }),
             });
             const result = await res.json().catch(() => ({})) as { success?: boolean; message?: string };
             if (import.meta.env.DEV && !result.success) {
-                console.info('[Optional] Branded email via Resend skipped:', result.message || res.status);
+                console.info('[Registration] Resend Edge Function:', result.message || res.status);
             }
         } catch {
-            // Edge Function not deployed — that's fine, Supabase sends its own email
+            /* Edge Function missing — dev may rely on console code */
         }
-
     }
 
     if (import.meta.env.DEV) {
-        console.log('[Dev] 6-digit fallback code:', token, '| email:', data.email);
+        if (tokenForPending) {
+            console.log('[Dev] Fallback 6-digit code (only valid if Supabase sign-up failed):', tokenForPending, '|', data.email);
+        } else {
+            console.log('[Dev] Use the 6-digit code from the Supabase confirmation email:', data.email);
+        }
     }
+
+    const redirectUrlHint =
+        typeof window !== 'undefined'
+            ? ` Add "${window.location.origin}/" under Authentication → URL Configuration → Redirect URLs (and matching Site URL) so confirmation and reset emails link back to this app.`
+            : '';
+
+    const captchaBlocked = !supabaseSignupOk && isCaptchaRelatedAuthMessage(signUpErrorMessage);
+    const signupCaptchaCfg = getAuthCaptchaConfig();
+    const signupHasCaptchaSiteKey = !!signupCaptchaCfg;
+    const signupCaptchaSecretMismatch =
+        captchaBlocked && signupHasCaptchaSiteKey && isCaptchaSiteSecretMismatchMessage(signUpErrorMessage);
+
+    let emailDeliveryHint: string | null = null;
+    let signUpEmailIssueKind: SignUpEmailIssueKind | null = null;
+
+    if (!isSupabaseReady()) {
+        emailDeliveryHint =
+            'Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY so confirmation emails can be sent from your project.';
+        signUpEmailIssueKind = 'config';
+    } else if (!supabaseSignupOk) {
+        signUpEmailIssueKind = captchaBlocked
+            ? signupCaptchaSecretMismatch
+                ? 'captcha_mismatch'
+                : 'captcha'
+            : 'smtp';
+        if (captchaBlocked) {
+            if (signupHasCaptchaSiteKey) {
+                if (signupCaptchaSecretMismatch) {
+                    const prov = signupCaptchaCfg!.provider === 'turnstile' ? 'Turnstile' : 'hCaptcha';
+                    const envKey =
+                        signupCaptchaCfg!.provider === 'turnstile'
+                            ? 'VITE_TURNSTILE_SITE_KEY'
+                            : 'VITE_HCAPTCHA_SITE_KEY';
+                    emailDeliveryHint =
+                        `Supabase rejected the captcha (${signUpErrorMessage || 'sitekey-secret-mismatch'}): the ${prov} secret stored under Authentication → Attack Protection does not belong to the same ${prov} site as ${envKey} in your environment. Open your ${prov} dashboard, find the site that owns this site key, copy its secret into Supabase, and ensure Attack Protection is set to ${prov} (not the other provider). Restart the dev server after changing .env.local.`;
+                } else {
+                    emailDeliveryHint =
+                        `Supabase refused sign-up (${signUpErrorMessage || 'captcha verification failed'}). No confirmation email is sent until sign-up succeeds. Complete the captcha widget again (tokens expire quickly), then tap Request Account once more. If this persists, confirm the same provider (Turnstile vs hCaptcha) is selected in Supabase as in your .env.local.`;
+                }
+            } else {
+                emailDeliveryHint = `Supabase Bot Protection is on, but this app has no captcha site key. Add VITE_HCAPTCHA_SITE_KEY or VITE_TURNSTILE_SITE_KEY to .env.local (match the provider in Authentication → Attack Protection), restart the dev server, complete the challenge on the form, and register again. Alternatively turn off Bot Protection in Supabase. Until sign-up succeeds, nothing is sent to ${data.email.trim()}.`;
+            }
+        } else {
+            emailDeliveryHint =
+                `Sign-up could not be completed: ${signUpErrorMessage || 'Unknown error.'} If you deployed send-confirmation-email with Resend, check RESEND_API_KEY, RESEND_FROM (verified domain), and Supabase function logs. Confirm Authentication → Emails uses working SMTP (built-in or Custom SMTP to Resend).${redirectUrlHint}`;
+        }
+    }
+
+    const failureMessage = captchaBlocked
+        ? !signupHasCaptchaSiteKey
+            ? `Registration did not complete, so nothing was sent to ${data.email.trim()} yet. With Bot Protection enabled, add the matching captcha site key to .env.local (see .env.example), restart the dev server, complete the challenge, and try again — or turn protection off in Supabase while testing.`
+            : signupCaptchaSecretMismatch
+              ? `Registration did not complete, so nothing was sent to ${data.email.trim()} yet. Your app’s captcha site key and the secret in Supabase are not a pair — fix Authentication → Attack Protection (details below), then try again.`
+              : `Registration did not complete, so nothing was sent to ${data.email.trim()} yet. Complete the captcha on the form and tap Request Account again, or turn Bot Protection off in Supabase while testing.`
+        : `We could not create your account in the hosted sign-up service. A 6-digit code was sent only if the Resend email function is working — otherwise check the browser console in development.`;
 
     return {
         success: true,
         message: supabaseSignupOk
-            ? `We've sent a confirmation code to ${data.email.trim()}. Check your inbox (and spam folder) for the 6-digit code, then enter it below.`
-            : `We've sent a 6-digit code to your email. Enter it below to activate your account.`,
+            ? `We have sent a confirmation email to ${data.email.trim()}. Open it and enter the 6-digit code here (or use the confirmation link). Check your spam folder.`
+            : failureMessage,
+        emailDeliveryHint,
+        signUpEmailIssueKind,
     };
 };
 
@@ -325,45 +535,48 @@ export const confirmAccount = async (email: string, token: string): Promise<{ su
     // ── Try Supabase Auth OTP verification first (email type) ──
     if (isSupabaseReady()) {
         const otpResult = await verifyEmailOtp(email, token);
-        if (otpResult.success) {
-            // Supabase user confirmed — also create local user record for the app
+        if (otpResult.success === false) {
+            if (import.meta.env.DEV) {
+                console.warn('[Auth] Supabase OTP verification failed, trying local token:', otpResult.message);
+            }
+        } else {
             const users = await fetchAllUsers();
+            const sb = otpResult.user;
+            const displayName = `${pending.firstName} ${pending.lastName}`.trim() || sb.name;
             const newUser: User = {
-                id: Math.max(...users.map(u => u.id), 0) + 1,
-                name: `${pending.firstName} ${pending.lastName}`.trim(),
-                role: 'Reporter',
-                safetyScore: 0,
-                xp: 0,
-                email: pending.email,
+                ...sb,
+                id: sb.id,
+                name: displayName,
                 username: pending.username,
-                phone: pending.phone || undefined,
-                password: pending.password,
-                skills: [],
-                volunteerPoints: 0,
-                permissions: [],
+                phone: pending.phone || sb.phone,
+                email: pending.email,
+                password: undefined,
             };
             setCached(USERS_CACHE_KEY, [...users, newUser]);
             setCached(PENDING_REG_KEY, all.filter(p => p.email.toLowerCase() !== emailNorm));
             return {
                 success: true,
-                message: 'Your account has been confirmed via Supabase. You can now sign in.',
+                message: 'Your account has been confirmed. You can now sign in with your email and password.',
                 user: newUser,
             };
         }
-        // If Supabase OTP failed, fall through to local token check
-        if (import.meta.env.DEV) {
-            console.warn('[Auth] Supabase OTP verification failed, trying local token:', otpResult.message);
-        }
     }
 
-    // ── Fallback: local 6-digit token check ──
+    // ── Fallback: local 6-digit token (only when Supabase sign-up failed at registration) ──
+    if (!pending.token) {
+        return {
+            success: false,
+            message:
+                'Invalid or expired code. Use the 6-digit code from your confirmation email, or tap “Resend confirmation code” to get a new email from the sign-up service.',
+        };
+    }
     if (pending.token !== token) {
         return { success: false, message: 'Invalid or expired code. Please check the 6-digit code or request a new one.' };
     }
 
     const users = await fetchAllUsers();
     const newUser: User = {
-        id: Math.max(...users.map(u => u.id), 0) + 1,
+        id: newLocalUserId(),
         name: `${pending.firstName} ${pending.lastName}`.trim(),
         role: 'Reporter',
         safetyScore: 0,
@@ -394,17 +607,117 @@ export const getPendingRegistration = (email: string): PendingRegistration | nul
     return all.find(p => p.email.toLowerCase() === emailNorm) || null;
 };
 
+/**
+ * Resend sign-up confirmation: Supabase Auth email first (correct OTP), then Resend Edge Function if a local fallback token exists.
+ */
+export const resendSixDigitConfirmationEmail = async (
+    email: string,
+    captchaToken?: string | null
+): Promise<{ success: boolean; message: string }> => {
+    const pending = getPendingRegistration(email);
+    if (!pending) {
+        return {
+            success: false,
+            message: 'No pending registration found. Please start registration again.',
+        };
+    }
+    if (Date.now() > pending.expiresAt) {
+        return {
+            success: false,
+            message: 'Your code has expired. Please request a new account.',
+        };
+    }
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    const errors: string[] = [];
+
+    if (isSupabaseReady()) {
+        const supa = await resendSignUpConfirmation(email.trim(), captchaToken);
+        if (supa.success) {
+            return {
+                success: true,
+                message: 'Another confirmation email was sent. Use the 6-digit code from that message (or the link inside it).',
+            };
+        }
+        const supaMsg = supa.message || 'Sign-up service could not resend email.';
+        if (isCaptchaRelatedAuthMessage(supaMsg)) {
+            return {
+                success: false,
+                message: `${supaMsg} Complete the security check on this page, then tap Resend again.`,
+            };
+        }
+        errors.push(supaMsg);
+    }
+
+    if (pending.token && supabaseUrl && anonKey) {
+        try {
+            const res = await fetch(`${supabaseUrl}/functions/v1/send-confirmation-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${anonKey}`,
+                },
+                body: JSON.stringify({ email: pending.email.trim(), code: pending.token }),
+            });
+            const result = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string };
+            if (res.ok && result.success) {
+                return {
+                    success: true,
+                    message: 'A 6-digit code was sent via your Resend integration. Enter that code below.',
+                };
+            }
+            errors.push(result.message || `Resend function returned ${res.status}.`);
+        } catch {
+            errors.push('Could not reach the send-confirmation-email Edge Function.');
+        }
+    } else if (!pending.token && errors.length > 0) {
+        return {
+            success: false,
+            message: errors.join(' '),
+        };
+    }
+
+    return {
+        success: false,
+        message:
+            errors.join(' ') ||
+            'Could not resend email. In Supabase: Authentication → Emails — enable Custom SMTP (Resend) or fix built-in mail; deploy send-confirmation-email with RESEND_API_KEY if you use the branded code path.',
+    };
+};
+
 // --- ALERTS ---
 
 const ALERTS_CACHE_KEY = 'safesphere_alerts_v2'; // Bumped: added tsunami, volcano, hurricane, storm types
 
+function mergeFetchedAlertsWithCache(server: Alert[], cached: Alert[] | null | undefined): Alert[] {
+    if (!cached?.length) return server;
+    const serverById = new Set(server.map((a) => a.id));
+    // Preserve any locally-created alerts that aren't present on the server response yet.
+    const missingFromServer = cached.filter((a) => !serverById.has(a.id));
+    const merged = [...missingFromServer, ...server];
+    return merged.sort((a, b) => b.id - a.id);
+}
+
 export const fetchAlerts = async (): Promise<Alert[]> => {
+    // For demo accounts, keep alerts purely local so new broadcasts don't vanish on refresh.
+    // (Admin/Responder/Reporter demo roles must see the same active alerts list.)
+    if (isUsingDemoUser()) {
+        const cached = getCached<Alert[]>(ALERTS_CACHE_KEY);
+        if (cached?.length) return cached;
+        setCached(ALERTS_CACHE_KEY, MOCK_ALERTS);
+        return MOCK_ALERTS;
+    }
+
     if (useSupabase() && supabase) {
         try {
             const { data, error } = await supabase.from('alerts').select('*').order('id', { ascending: false });
             if (!error && data && data.length > 0) {
-                setCached(ALERTS_CACHE_KEY, data as Alert[]);
-                return data as Alert[];
+                const serverAlerts = data as Alert[];
+                const cached = getCached<Alert[]>(ALERTS_CACHE_KEY);
+                const merged = mergeFetchedAlertsWithCache(serverAlerts, cached);
+                setCached(ALERTS_CACHE_KEY, merged);
+                return merged;
             }
         } catch { /* fallback */ }
     }
@@ -412,14 +725,177 @@ export const fetchAlerts = async (): Promise<Alert[]> => {
         try {
             const res = await fetch(`${API_URL}?action=getAlerts`);
             const data = await res.json();
-            setCached(ALERTS_CACHE_KEY, data);
-            return data;
+            const cached = getCached<Alert[]>(ALERTS_CACHE_KEY);
+            const merged = mergeFetchedAlertsWithCache(data as Alert[], cached);
+            setCached(ALERTS_CACHE_KEY, merged);
+            return merged;
         } catch { /* fallback */ }
     }
     const cached = getCached<Alert[]>(ALERTS_CACHE_KEY);
     if (cached?.length) return cached;
     setCached(ALERTS_CACHE_KEY, MOCK_ALERTS);
     return MOCK_ALERTS;
+};
+
+export const submitAlert = async (data: Partial<Alert>): Promise<boolean> => {
+    const id = data.id ?? Math.floor(Date.now());
+    // Always include a full, parseable date-time so Home’s sorter can rank it correctly.
+    const timestamp =
+        data.timestamp ??
+        new Date().toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        });
+
+    const newAlert: Alert = {
+        id,
+        title: data.title ?? '',
+        description: data.description ?? '',
+        severity: data.severity ?? 'low',
+        timestamp,
+        type: data.type ?? 'general',
+        archived: Boolean(data.archived),
+        resolved: Boolean(data.resolved),
+    };
+
+    // Demo: persist locally only (mirrors fetchAlerts() demo behaviour).
+    if (isUsingDemoUser()) {
+        const current = getCached<Alert[]>(ALERTS_CACHE_KEY) ?? MOCK_ALERTS;
+        const updated = [newAlert, ...current.filter((a) => a.id !== newAlert.id)].sort((a, b) => b.id - a.id);
+        setCached(ALERTS_CACHE_KEY, updated);
+        return true;
+    }
+
+    // Optimistic update so the sender sees the alert immediately.
+    const current = await fetchAlerts();
+    const updated = [newAlert, ...current.filter((a) => a.id !== newAlert.id)].sort((a, b) => b.id - a.id);
+    setCached(ALERTS_CACHE_KEY, updated);
+
+    if (useSupabase() && supabase) {
+        try {
+            await supabase.from('alerts').upsert({
+                id: newAlert.id,
+                title: newAlert.title,
+                description: newAlert.description,
+                severity: newAlert.severity,
+                timestamp: newAlert.timestamp,
+                type: newAlert.type,
+            });
+        } catch {
+            // Saved locally via cache; the alert will still show until the next reload.
+        }
+    }
+
+    return true;
+};
+
+export const updateAlert = async (id: number, updates: Partial<Alert>): Promise<boolean> => {
+    const current = await fetchAlerts();
+    const existing = current.find((a) => a.id === id);
+
+    const updatedAlert: Alert = {
+        ...(existing ?? {
+            id,
+            title: '',
+            description: '',
+            severity: 'low',
+            timestamp: new Date().toLocaleString('en-GB'),
+            type: 'general',
+        }),
+        ...updates,
+        id,
+        archived: updates.archived ?? existing?.archived ?? false,
+        resolved: updates.resolved ?? existing?.resolved ?? false,
+    };
+
+    const updated = current.map((a) => (a.id === id ? updatedAlert : a)).sort((a, b) => b.id - a.id);
+    setCached(ALERTS_CACHE_KEY, updated);
+
+    if (isUsingDemoUser()) return true;
+
+    if (useSupabase() && supabase) {
+        try {
+            await supabase.from('alerts').upsert({
+                id: updatedAlert.id,
+                title: updatedAlert.title,
+                description: updatedAlert.description,
+                severity: updatedAlert.severity,
+                timestamp: updatedAlert.timestamp,
+                type: updatedAlert.type,
+            });
+        } catch {
+            // If backend update fails (e.g., column mismatch), keep local edits visible.
+        }
+    }
+    return true;
+};
+
+export const archiveAlert = async (id: number, archived = true): Promise<boolean> => {
+    const current = await fetchAlerts();
+    const updated = current
+        .map((a) => (a.id === id ? { ...a, archived: Boolean(archived) } : a))
+        .sort((a, b) => b.id - a.id);
+    setCached(ALERTS_CACHE_KEY, updated);
+
+    if (isUsingDemoUser()) return true;
+
+    if (useSupabase() && supabase) {
+        try {
+            // Best-effort: only works if alerts table has an "archived" column.
+            await supabase.from('alerts').update({ archived: Boolean(archived) }).eq('id', id);
+        } catch {
+            // Column might not exist in the DB yet; local archive still works for this browser.
+        }
+    }
+    return true;
+};
+
+export const deleteAlert = async (id: number): Promise<boolean> => {
+    // Demo users: keep deletes purely local to avoid “gone after refresh” issues.
+    if (isUsingDemoUser()) {
+        const cached = getCached<Alert[]>(ALERTS_CACHE_KEY) ?? MOCK_ALERTS;
+        const updated = cached.filter((a) => a.id !== id);
+        setCached(ALERTS_CACHE_KEY, updated);
+        return true;
+    }
+
+    const current = await fetchAlerts();
+    const updated = current.filter((a) => a.id !== id);
+    setCached(ALERTS_CACHE_KEY, updated);
+
+    if (useSupabase() && supabase) {
+        try {
+            await supabase.from('alerts').delete().eq('id', id);
+        } catch {
+            // If backend delete fails, local cache still updates; the next fetch will reconcile.
+        }
+    }
+
+    return true;
+};
+
+export const setAlertResolved = async (id: number, resolved = true): Promise<boolean> => {
+    const current = await fetchAlerts();
+    const updated = current
+        .map((a) => (a.id === id ? { ...a, resolved: Boolean(resolved) } : a))
+        .sort((a, b) => b.id - a.id);
+    setCached(ALERTS_CACHE_KEY, updated);
+
+    if (isUsingDemoUser()) return true;
+
+    if (useSupabase() && supabase) {
+        try {
+            // Best-effort if DB column exists.
+            await supabase.from('alerts').update({ resolved: Boolean(resolved) }).eq('id', id);
+        } catch {
+            // Local-only update.
+        }
+    }
+    return true;
 };
 
 // --- RESOURCES ---
@@ -445,21 +921,39 @@ const toResource = (row: Record<string, unknown>): Resource => ({
 });
 
 export const fetchResources = async (): Promise<Resource[]> => {
+    try {
+        for (const k of LEGACY_RESOURCE_CACHE_KEYS) {
+            localStorage.removeItem(k);
+        }
+    } catch { /* ignore */ }
+
+    const useYangonMock = (): Resource[] => {
+        setCached(RESOURCES_CACHE_KEY, MOCK_RESOURCES);
+        return MOCK_RESOURCES;
+    };
+
     if (useSupabase() && supabase) {
         try {
             const { data, error } = await supabase.from('resources').select('*').order('id');
             if (!error && data && data.length > 0) {
                 const items = data.map(toResource);
+                if (shouldReplaceResourcesWithYangonMock(items)) {
+                    return useYangonMock();
+                }
                 setCached(RESOURCES_CACHE_KEY, items);
                 return items;
             }
         } catch { /* fallback */ }
     }
     const cached = getCached<Resource[]>(RESOURCES_CACHE_KEY);
-    if (cached?.length) return cached;
+    if (cached?.length) {
+        if (shouldReplaceResourcesWithYangonMock(cached)) {
+            return useYangonMock();
+        }
+        return cached;
+    }
     if (USE_MOCK_DATA) {
-        setCached(RESOURCES_CACHE_KEY, MOCK_RESOURCES);
-        return MOCK_RESOURCES;
+        return useYangonMock();
     }
     try {
         const res = await fetch(`${API_URL}?action=getResources`);
@@ -525,13 +1019,114 @@ export const deleteResource = async (id: number): Promise<boolean> => {
 const REPORTS_CACHE_KEY = 'safesphere_reports_v6_myanmar';
 
 // safesphere_postgres uses camelCase columns for incident_reports
+const REPORT_STATUSES: IncidentReport['status'][] = [
+    'pending',
+    'active',
+    'resolved',
+    'approved',
+    'info_requested',
+    'delayed',
+    'rejected',
+    'en_route',
+    'on_scene',
+];
+
+/** DB / sync may use different casing or legacy labels — map into app statuses. */
+const STATUS_ALIASES: Record<string, IncidentReport['status']> = {
+    new: 'pending',
+    completed: 'resolved',
+    closed: 'resolved',
+    done: 'resolved',
+    archived: 'resolved',
+    archive: 'resolved',
+    accepted: 'active',
+};
+
+const normaliseReportStatus = (raw: unknown): IncidentReport['status'] => {
+    if (raw == null) return 'pending';
+    const s0 = String(raw).trim().toLowerCase().replace(/\s+/g, '_');
+    if (STATUS_ALIASES[s0]) return STATUS_ALIASES[s0];
+    if ((REPORT_STATUSES as string[]).includes(s0)) return s0 as IncidentReport['status'];
+    return 'pending';
+};
+
+/** Monotonic response workflow — merge prefers local row when it is ahead of stale server data. */
+const STATUS_PROGRESS: Record<string, number> = {
+    pending: 1,
+    info_requested: 2,
+    delayed: 3,
+    active: 4,
+    approved: 4,
+    en_route: 5,
+    on_scene: 6,
+    resolved: 10,
+    rejected: 10,
+};
+
+function incidentStatusProgress(status: string | undefined): number {
+    const s = (status || 'pending').toLowerCase();
+    return STATUS_PROGRESS[s] ?? 0;
+}
+
+/** After status updates, Supabase may lag; avoid replacing cache with older server rows (e.g. missing “resolved”). */
+function mergeFetchedReportsWithCache(
+    server: IncidentReport[],
+    cached: IncidentReport[] | null | undefined
+): IncidentReport[] {
+    if (!cached?.length) return server;
+    const serverById = new Map(server.map((r) => [r.id, r]));
+    const merged = new Map<string, IncidentReport>();
+    for (const r of server) merged.set(r.id, { ...r });
+    for (const c of cached) {
+        const s = serverById.get(c.id);
+        if (!s) {
+            merged.set(c.id, { ...c });
+            continue;
+        }
+        const ps = incidentStatusProgress(s.status);
+        const pc = incidentStatusProgress(c.status);
+        if (pc > ps) {
+            merged.set(c.id, {
+                ...s,
+                status: c.status,
+                adminNotes: c.adminNotes ?? s.adminNotes,
+                // Server rows often omit reporter_id; keep identity from cache so reporters still see History.
+                reporterId: s.reporterId != null ? s.reporterId : c.reporterId,
+                contactPerson: s.contactPerson ?? c.contactPerson,
+                contactPhone: s.contactPhone ?? c.contactPhone,
+                contactEmail: s.contactEmail ?? c.contactEmail,
+            });
+        }
+    }
+    let result = Array.from(merged.values()).sort((a, b) =>
+        (b.timestamp || '').localeCompare(a.timestamp || '')
+    );
+    if (!cached?.length) return result;
+    const cacheById = new Map(cached.map((c) => [c.id, c]));
+    result = result.map((r) => {
+        const c = cacheById.get(r.id);
+        if (!c) return r;
+        // Preserve reporter identity from cache when server data is incomplete or stale.
+        // This ensures "My submissions / History" shows rejected/resolved items correctly.
+        if (c.reporterId == null) return r;
+        return {
+            ...r,
+            reporterId: c.reporterId,
+            contactPerson: r.contactPerson ?? c.contactPerson,
+            contactPhone: r.contactPhone ?? c.contactPhone,
+            contactEmail: r.contactEmail ?? c.contactEmail,
+        };
+    });
+    return result;
+}
+
 const toReport = (row: Record<string, unknown>): IncidentReport => ({
-    id: row.id as number,
+    id: row.id != null ? String(row.id) : '',
     type: row.type as string,
     description: row.description as string,
     lat: row.lat as number,
     lng: row.lng as number,
-    status: row.status as IncidentReport['status'],
+    status: normaliseReportStatus(row.status),
     timestamp: row.timestamp as string,
     urgency: row.urgency as IncidentReport['urgency'],
     department: row.department as string | undefined,
@@ -543,33 +1138,64 @@ const toReport = (row: Record<string, unknown>): IncidentReport => ({
     mitigationPlan: (row.mitigationPlan ?? row.mitigation_plan) as string | undefined,
     contactPerson: (row.contactPerson ?? row.contact_person) as string | undefined,
     contactPhone: (row.contactPhone ?? row.contact_phone) as string | undefined,
+    contactEmail: (row.contactEmail ?? row.contact_email) as string | undefined,
     image: row.image as string | undefined,
     video: row.video as string | undefined,
     audio: row.audio as string | undefined,
     adminNotes: (row.adminNotes ?? row.admin_notes) as string | undefined,
     comments: row.comments as IncidentReport['comments'],
-    reporterId: (row.reporterId ?? row.reporter_id) as number | undefined,
+    reporterId: (row.reporterId ?? row.reporter_id) as string | undefined,
+    locationSource: (row.locationSource ?? row.location_source) as IncidentReport['locationSource'],
 });
 
 const toReportRow = (r: IncidentReport): Record<string, unknown> => ({
     id: r.id, type: r.type, description: r.description, lat: r.lat, lng: r.lng, status: r.status, timestamp: r.timestamp,
     urgency: r.urgency, department: r.department, structuralDamage: r.structuralDamage, estRepairDays: r.estRepairDays,
     estCost: r.estCost, repeatable: r.repeatable, situationDiscussed: r.situationDiscussed, mitigationPlan: r.mitigationPlan,
-    contactPerson: r.contactPerson, contactPhone: r.contactPhone, image: r.image, video: r.video, audio: r.audio,
+    contactPerson: r.contactPerson, contactPhone: r.contactPhone, contactEmail: r.contactEmail, image: r.image, video: r.video, audio: r.audio,
     adminNotes: r.adminNotes,
+    /** Persisted so History → “My submissions” can filter after responder updates (was missing before). */
+    reporterId: r.reporterId,
 });
 
+const toReportRowForInsert = (r: IncidentReport): Record<string, unknown> => {
+    const row = toReportRow(r);
+    delete row.id;  // Omit id to allow PostgreSQL SERIAL auto-generation
+    return row;
+};
+
 export const fetchReports = async (): Promise<IncidentReport[]> => {
-    if (useSupabase() && supabase) {
+    // Demo accounts should not overwrite their locally submitted reports
+    // with whatever is currently stored in Supabase.
+    if (!isUsingDemoUser() && useSupabase() && supabase) {
         try {
             const { data, error } = await supabase.from('incident_reports').select('*').order('id', { ascending: false });
-            if (!error && data && data.length > 0) {
-                const items = data.map(toReport);
-                setCached(REPORTS_CACHE_KEY, items);
-                return items;
+            if (!error && data != null) {
+                const serverItems = (data as Record<string, unknown>[]).map(toReport);
+                const cached = getCached<IncidentReport[]>(REPORTS_CACHE_KEY);
+                const merged = mergeFetchedReportsWithCache(serverItems, cached);
+                setCached(REPORTS_CACHE_KEY, merged);
+                return merged;
             }
         } catch { /* fallback */ }
     }
+
+    // Demo mode: do not overwrite local cache with MOCK_REPORTS once the key exists.
+    // This prevents "report disappears" issues when switching between screens.
+    if (isUsingDemoUser()) {
+        const raw = localStorage.getItem(REPORTS_CACHE_KEY);
+        const cached = getCached<IncidentReport[]>(REPORTS_CACHE_KEY);
+
+        // First run: initialise with mock baseline.
+        if (raw == null) {
+            setCached(REPORTS_CACHE_KEY, MOCK_REPORTS);
+            return MOCK_REPORTS;
+        }
+
+        // Key exists already: return whatever we can parse (or empty if parse fails).
+        return cached ?? [];
+    }
+
     const cached = getCached<IncidentReport[]>(REPORTS_CACHE_KEY);
     if (cached?.length) return cached;
     if (USE_MOCK_DATA) {
@@ -587,15 +1213,28 @@ export const fetchReports = async (): Promise<IncidentReport[]> => {
 };
 
 export const submitReport = async (data: Partial<IncidentReport>): Promise<boolean> => {
-    const reportId = data.id || Math.floor(Math.random() * 1000000);
+    const reportId = isUsingDemoUser()
+        ? nextDemoReportId()
+        : (data.id != null && data.id !== '' ? String(data.id) : String(Math.floor(Math.random() * 1_000_000)));
+    // Ensure reporterId exists so History → "My Submissions" can filter correctly.
+    let resolvedReporterId = data.reporterId;
+    if (resolvedReporterId == null) {
+        try {
+            const saved = localStorage.getItem('safesphere_user');
+            const parsed = saved ? JSON.parse(saved) : null;
+            if (parsed?.id != null) resolvedReporterId = parsed.id as string;
+        } catch { /* ignore */ }
+    }
     const newReport: IncidentReport = {
         id: reportId,
         type: data.type || 'General',
         description: data.description || '',
-        lat: data.lat || 0,
-        lng: data.lng || 0,
+        // Use nullish coalescing so valid coordinates like 0 are preserved.
+        lat: data.lat ?? 0,
+        lng: data.lng ?? 0,
+        locationSource: data.locationSource,
         status: data.status || 'pending',
-        timestamp: data.timestamp || new Date().toLocaleTimeString(),
+        timestamp: data.timestamp || new Date().toISOString(),
         urgency: data.urgency,
         department: data.department,
         structuralDamage: data.structuralDamage,
@@ -606,38 +1245,76 @@ export const submitReport = async (data: Partial<IncidentReport>): Promise<boole
         mitigationPlan: data.mitigationPlan,
         contactPerson: data.contactPerson,
         contactPhone: data.contactPhone,
+        contactEmail: data.contactEmail,
         image: data.image,
         video: data.video,
         audio: data.audio,
         adminNotes: data.adminNotes,
         comments: data.comments,
-        reporterId: data.reporterId
+        reporterId: resolvedReporterId
     };
-    const current = await fetchReports();
+    // Demo mode: read directly from local cache so we never accidentally overwrite
+    // the user’s existing submissions with mock fallback.
+    const current = isUsingDemoUser()
+        ? (getCached<IncidentReport[]>(REPORTS_CACHE_KEY) ?? (localStorage.getItem(REPORTS_CACHE_KEY) == null ? [...MOCK_REPORTS] : []))
+        : await fetchReports();
+
     const existing = current.length > 0 ? current : [...MOCK_REPORTS];
-    const updated = data.id ? existing.map(r => r.id === reportId ? newReport : r) : [newReport, ...existing];
+    // If this id does not exist in the cached list, treat it as a new submission.
+    // For offline-synced reports: always treat as INSERT (not UPDATE) because they're new to the server.
+    // The server will auto-generate a new SERIAL id, different from the client-side id.
+    const isOfflineSync = isOfflineQueueSuppressed();
+    const isUpdate = !isOfflineSync && existing.some(r => r.id === reportId);
+    
+    const updated = isUpdate ? existing.map(r => r.id === reportId ? newReport : r) : [newReport, ...existing];
     setCached(REPORTS_CACHE_KEY, updated);
-    if (useSupabase() && supabase) {
-        try {
-            await supabase.from('incident_reports').upsert(toReportRow(newReport));
-        } catch { /* saved locally */ }
+    if (!isUsingDemoUser()) {
+        if (useSupabase() && supabase) {
+            try {
+                if (isUpdate) {
+                    // Existing report (direct edit, not offline sync): use UPDATE with id
+                    await supabase.from('incident_reports').update(toReportRow(newReport)).eq('id', reportId);
+                } else {
+                    // New report or offline-synced: use INSERT without id for server auto-generation
+                    await supabase.from('incident_reports').insert(toReportRowForInsert(newReport));
+                }
+            } catch (err) {
+                // Network failures: persist the write and replay later.
+                void enqueueOfflineAction('submitReport', newReport);
+                console.warn('[submitReport] sync failed, queued for sync:', err);
+                if (isOfflineQueueSuppressed()) throw err;
+            }
+        } else {
+            void enqueueOfflineAction('submitReport', newReport);
+            if (isOfflineQueueSuppressed()) throw new Error('Supabase is not available for sync yet');
+        }
     }
     return true;
 };
 
-export const updateReportStatus = async (id: number, status: IncidentReport['status'], notes?: string): Promise<boolean> => {
+export const updateReportStatus = async (id: string, status: IncidentReport['status'], notes?: string): Promise<boolean> => {
     const reports = await fetchReports();
     const updated = reports.map(r => r.id === id ? { ...r, status, adminNotes: notes || r.adminNotes } : r);
     setCached(REPORTS_CACHE_KEY, updated);
-    if (useSupabase() && supabase) {
-        try {
-            await supabase.from('incident_reports').update({ status, adminNotes: notes }).eq('id', id);
-        } catch { /* saved locally */ }
+    if (!isUsingDemoUser()) {
+        const payload = { id, status, notes };
+        if (useSupabase() && supabase) {
+            try {
+                await supabase.from('incident_reports').update({ status, adminNotes: notes }).eq('id', id);
+            } catch (err) {
+                void enqueueOfflineAction('updateReportStatus', payload);
+                console.warn('[updateReportStatus] update failed, queued for sync:', err);
+                if (isOfflineQueueSuppressed()) throw err;
+            }
+        } else {
+            void enqueueOfflineAction('updateReportStatus', payload);
+            if (isOfflineQueueSuppressed()) throw new Error('Supabase is not available for sync yet');
+        }
     }
     return true;
 };
 
-export const deleteReport = async (id: number): Promise<boolean> => {
+export const deleteReport = async (id: string): Promise<boolean> => {
     const current = await fetchReports();
     const updated = current.filter(r => r.id !== id);
     setCached(REPORTS_CACHE_KEY, updated);
@@ -649,66 +1326,152 @@ export const deleteReport = async (id: number): Promise<boolean> => {
     return true;
 };
 
-/** Fetch reports submitted by the current user. Derived from main reports list. */
-export const fetchMyReports = async (reporterId?: number): Promise<IncidentReport[]> => {
-    const reports = await fetchReports();
-    if (reporterId == null) {
-        const saved = localStorage.getItem('safesphere_user');
-        let userId: number | undefined;
-        try {
-            if (saved) {
-                const user = JSON.parse(saved);
-                userId = user?.id;
-            }
-        } catch { /* ignore */ }
-        if (userId == null) return reports;
-        return reports.filter(r => r.reporterId === userId);
+const digitsOnly = (s: string | undefined | null): string => String(s ?? '').replace(/\D/g, '');
+
+const sameReporterId = (a: unknown, b: unknown): boolean =>
+    a != null && b != null && String(a) === String(b);
+
+/** Legacy rows with no reporter_id: match by contact email, phone, or contact name vs profile name. */
+const reportLikelyFromUser = (
+    r: IncidentReport,
+    userEmail?: string | null,
+    userPhone?: string | null,
+    userName?: string | null
+): boolean => {
+    const email = userEmail?.trim().toLowerCase();
+    const reportEmail = r.contactEmail?.trim().toLowerCase();
+    if (email && reportEmail && email === reportEmail) return true;
+    const pu = digitsOnly(userPhone ?? undefined);
+    const pr = digitsOnly(r.contactPhone);
+    if (pu.length >= 7 && pr.length >= 7) {
+        if (pu === pr) return true;
+        if (pu.slice(-10) === pr.slice(-10) && pu.slice(-10).length >= 7) return true;
     }
-    return reports.filter(r => r.reporterId === reporterId);
+    const un = userName?.trim().toLowerCase();
+    const cp = r.contactPerson?.trim().toLowerCase();
+    if (un && cp && un === cp && un.length >= 2) return true;
+    return false;
+};
+
+/** Whether this incident should appear as “mine” for the reporter (queue, History, edit eligibility helpers). */
+export function incidentBelongsToReporter(
+    r: IncidentReport,
+    user: { id?: string; email?: string; phone?: string; name?: string } | null | undefined
+): boolean {
+    if (!user) return false;
+    const uid = user.id;
+    if (uid != null) {
+        if (sameReporterId(r.reporterId, uid)) return true;
+        if (r.reporterId != null) return false;
+        return reportLikelyFromUser(r, user.email, user.phone, user.name);
+    }
+    return reportLikelyFromUser(r, user.email, user.phone, user.name);
+}
+
+/** Fetch reports submitted by the current user. Derived from main reports list. */
+export const fetchMyReports = async (reporterId?: string): Promise<IncidentReport[]> => {
+    const reports = await fetchReports();
+    let uid: string | undefined = reporterId;
+    let userEmail: string | undefined;
+    let userPhone: string | undefined;
+    let userName: string | undefined;
+
+    const readStoredUser = () => {
+        try {
+            const saved = localStorage.getItem('safesphere_user');
+            if (!saved) return;
+            const user = JSON.parse(saved) as { id?: string; email?: string; phone?: string; name?: string };
+            if (uid == null && user?.id != null) uid = String(user.id);
+            userEmail = typeof user?.email === 'string' ? user.email : userEmail;
+            userPhone = typeof user?.phone === 'string' ? user.phone : userPhone;
+            userName = typeof user?.name === 'string' ? user.name : userName;
+        } catch { /* ignore */ }
+    };
+
+    if (reporterId == null) {
+        readStoredUser();
+        if (uid == null) return reports;
+    } else {
+        uid = reporterId;
+        readStoredUser();
+    }
+
+    return reports.filter((r) => {
+        if (sameReporterId(r.reporterId, uid)) return true;
+        if (r.reporterId != null) return false;
+        return reportLikelyFromUser(r, userEmail, userPhone, userName);
+    });
 };
 
 // --- CHECKLIST & DRILLS ---
 
 const CHECKLIST_CACHE_KEY = 'safesphere_checklist_v3_15items';
-const DRILLS_CACHE_KEY = 'safesphere_drills';
+const DRILLS_CACHE_KEY = 'safesphere_drills_v2';
+
+/** Merge two lists: use base as primary, overwrite with updates by id. Ensures no items are lost. */
+const mergeChecklist = (base: ChecklistItem[], updates: ChecklistItem[]): ChecklistItem[] => {
+    const byId = new Map(base.map(i => [i.id, i]));
+    updates.forEach(u => byId.set(u.id, u));
+    return Array.from(byId.values()).sort((a, b) => (a.id as number) - (b.id as number));
+};
 
 export const fetchChecklist = async (): Promise<ChecklistItem[]> => {
-    if (useSupabase() && supabase) {
+    const cached = getCached<ChecklistItem[]>(CHECKLIST_CACHE_KEY);
+    if (!isUsingDemoUser() && useSupabase() && supabase) {
         try {
             const { data, error } = await supabase.from('checklist').select('*').order('id');
-            if (!error && data && data.length > 0) {
-                const items = data as ChecklistItem[];
-                setCached(CHECKLIST_CACHE_KEY, items);
-                return items;
+            if (!error && data) {
+                const items = (data as ChecklistItem[]).length > 0 ? (data as ChecklistItem[]) : [];
+                const merged = cached && cached.length > 0
+                    ? mergeChecklist(cached, items)
+                    : items.length > 0 ? items : (cached || []);
+                let result = merged.length > 0 ? merged : (cached && cached.length > 0 ? cached : MOCK_CHECKLIST);
+                if (cached && cached.length > result.length) result = cached;
+                setCached(CHECKLIST_CACHE_KEY, result);
+                return result;
             }
         } catch { /* fallback to cache */ }
     }
-    const cached = getCached<ChecklistItem[]>(CHECKLIST_CACHE_KEY);
     if (cached && cached.length > 0) return cached;
     setCached(CHECKLIST_CACHE_KEY, MOCK_CHECKLIST);
     return MOCK_CHECKLIST;
 };
 
-export const submitChecklist = async (data: Partial<ChecklistItem>): Promise<boolean> => {
+export const submitChecklist = async (data: Partial<ChecklistItem>): Promise<ChecklistItem[]> => {
     const items = await fetchChecklist();
     const newItem: ChecklistItem = data.id
         ? { ...items.find(i => i.id === data.id)!, ...data } as ChecklistItem
         : { ...data, id: Date.now(), completed: false } as ChecklistItem;
     const updated = data.id ? items.map(i => i.id === data.id ? newItem : i) : [...items, newItem];
     setCached(CHECKLIST_CACHE_KEY, updated);
-    if (useSupabase() && supabase) {
-        try {
-            await supabase.from('checklist').upsert({ id: newItem.id, title: newItem.title, xp: newItem.xp, completed: newItem.completed });
-        } catch { /* saved locally */ }
+    if (!isUsingDemoUser()) {
+        if (useSupabase() && supabase) {
+            try {
+                await supabase.from('checklist').upsert({
+                    id: newItem.id,
+                    title: newItem.title,
+                    description: newItem.description ?? null,
+                    xp: newItem.xp,
+                    completed: newItem.completed
+                });
+            } catch (err) {
+                void enqueueOfflineAction('submitChecklist', newItem);
+                console.warn('[submitChecklist] upsert failed, queued for sync:', err);
+                if (isOfflineQueueSuppressed()) throw err;
+            }
+        } else {
+            void enqueueOfflineAction('submitChecklist', newItem);
+            if (isOfflineQueueSuppressed()) throw new Error('Supabase is not available for sync yet');
+        }
     }
-    return true;
+    return updated;
 };
 
 export const deleteChecklist = async (id: number): Promise<boolean> => {
     const items = await fetchChecklist();
     const updated = items.filter(i => i.id !== id);
     setCached(CHECKLIST_CACHE_KEY, updated);
-    if (useSupabase() && supabase) {
+    if (!isUsingDemoUser() && useSupabase() && supabase) {
         try {
             await supabase.from('checklist').delete().eq('id', id);
         } catch { /* saved locally */ }
@@ -716,45 +1479,362 @@ export const deleteChecklist = async (id: number): Promise<boolean> => {
     return true;
 };
 
+const toDrillSession = (row: Record<string, unknown>): DrillSession => ({
+    id: row.id as number,
+    title: row.title as string,
+    date: row.date as string,
+    time: (row.time as string) || undefined,
+    type: row.type as DrillSession['type'],
+    status: row.status as DrillSession['status'],
+    eventType: (row.eventType ?? row.event_type) as DrillSession['eventType'],
+    slots: (row.slots ?? row.slots_json) as DrillSession['slots'],
+    participants: row.participants as number | undefined,
+    notes: row.notes as string | undefined,
+});
+
+/** Merge two lists: use base as primary, overwrite with updates by id. Ensures no items are lost. */
+const mergeDrills = (base: DrillSession[], updates: DrillSession[]): DrillSession[] => {
+    const byId = new Map(base.map(i => [i.id, i]));
+    updates.forEach(u => byId.set(u.id, u));
+    return Array.from(byId.values()).sort((a, b) => (a.id as number) - (b.id as number));
+};
+
 export const fetchDrills = async (): Promise<DrillSession[]> => {
-    if (useSupabase() && supabase) {
+    const cached = getCached<DrillSession[]>(DRILLS_CACHE_KEY);
+    if (!isUsingDemoUser() && useSupabase() && supabase) {
         try {
             const { data, error } = await supabase.from('drills').select('*').order('id');
-            if (!error && data && data.length > 0) {
-                setCached(DRILLS_CACHE_KEY, data as DrillSession[]);
-                return data as DrillSession[];
+            if (!error && data) {
+                const items = (data as unknown[]).length > 0 ? (data as unknown[]).map((r: Record<string, unknown>) => toDrillSession(r)) : [];
+                const merged = cached && cached.length > 0
+                    ? mergeDrills(cached, items)
+                    : items.length > 0 ? items : (cached || []);
+                let result = merged.length > 0 ? merged : (cached && cached.length > 0 ? cached : MOCK_DRILLS);
+                if (cached && cached.length > result.length) result = cached;
+                setCached(DRILLS_CACHE_KEY, result);
+                return result;
             }
         } catch { /* fallback */ }
     }
-    const cached = getCached<DrillSession[]>(DRILLS_CACHE_KEY);
     if (cached && cached.length > 0) return cached;
     setCached(DRILLS_CACHE_KEY, MOCK_DRILLS);
     return MOCK_DRILLS;
 };
 
-export const submitDrill = async (data: Partial<DrillSession>): Promise<boolean> => {
+export const submitDrill = async (data: Partial<DrillSession>): Promise<DrillSession[]> => {
     const items = await fetchDrills();
     const newItem: DrillSession = data.id
         ? { ...items.find(i => i.id === data.id)!, ...data } as DrillSession
         : { ...data, id: Date.now() } as DrillSession;
     const updated = data.id ? items.map(i => i.id === data.id ? newItem : i) : [...items, newItem];
     setCached(DRILLS_CACHE_KEY, updated);
-    if (useSupabase() && supabase) {
+    if (!isUsingDemoUser()) {
+        if (useSupabase() && supabase) {
+            try {
+                await supabase.from('drills').upsert({
+                    id: newItem.id,
+                    title: newItem.title,
+                    date: newItem.date,
+                    time: newItem.time,
+                    type: newItem.type,
+                    status: newItem.status,
+                    event_type: newItem.eventType,
+                    slots: newItem.slots ? JSON.stringify(newItem.slots) : null,
+                    participants: newItem.participants,
+                    notes: newItem.notes
+                });
+            } catch (err) {
+                void enqueueOfflineAction('submitDrill', newItem);
+                console.warn('[submitDrill] upsert failed, queued for sync:', err);
+                if (isOfflineQueueSuppressed()) throw err;
+            }
+        } else {
+            void enqueueOfflineAction('submitDrill', newItem);
+            if (isOfflineQueueSuppressed()) throw new Error('Supabase is not available for sync yet');
+        }
+    }
+    return updated;
+};
+
+const DRILL_REGISTRATIONS_KEY = 'safesphere_drill_registrations_v2';
+
+/** Set after first failed REST call so we do not spam 404s when the table is not deployed. */
+let drillRegistrationsTableUnavailable = false;
+
+function isDrillRegistrationsMissingError(err: { code?: string; message?: string } | null): boolean {
+    if (!err) return false;
+    const code = err.code ?? '';
+    const msg = typeof err.message === 'string' ? err.message : '';
+    return (
+        code === 'PGRST205' ||
+        code === '42P01' ||
+        /relation ["'].*drill_registrations["'] does not exist/i.test(msg) ||
+        /could not find the table.*drill_registrations/i.test(msg)
+    );
+}
+
+export interface DrillRegistration {
+    drillId: number;
+    slotDate?: string;
+    slotTime?: string;
+}
+
+/** Coalesce parallel reads (e.g. Prepare mount) into one network request. */
+let drillRegistrationsSlotsReadInFlight: Promise<DrillRegistration[]> | null = null;
+
+export const getUserId = (): string => {
+    try {
+        const saved = localStorage.getItem('safesphere_user');
+        if (saved) {
+            const user = JSON.parse(saved);
+            if (user?.id) return user.id;
+        }
+    } catch { /* ignore */ }
+    return '550e8400-e29b-41d4-a716-446655440000';  // Default demo UUID
+};
+
+const getUserEmail = (): string | undefined => {
+    try {
+        const saved = localStorage.getItem('safesphere_user');
+        if (saved) {
+            const user = JSON.parse(saved);
+            return user?.email;
+        }
+    } catch { /* ignore */ }
+    return undefined;
+};
+
+export const getUserDrillRegistrations = async (): Promise<number[]> => {
+    const regs = await getUserDrillRegistrationsWithSlots();
+    return regs.map(r => r.drillId);
+};
+
+export const getUserDrillRegistrationsWithSlots = async (): Promise<DrillRegistration[]> => {
+    if (drillRegistrationsSlotsReadInFlight) {
+        return drillRegistrationsSlotsReadInFlight;
+    }
+    const run = async (): Promise<DrillRegistration[]> => {
+        const userId = getUserId();
+        if (useSupabase() && supabase && !drillRegistrationsTableUnavailable) {
+            try {
+                const { data, error } = await supabase
+                    .from('drill_registrations')
+                    .select('drill_id, slot_date, slot_time')
+                    .eq('user_id', userId);
+                if (error) {
+                    if (isDrillRegistrationsMissingError(error)) {
+                        drillRegistrationsTableUnavailable = true;
+                    }
+                } else if (data && data.length > 0) {
+                    return data.map((r: { drill_id: number; slot_date?: string; slot_time?: string }) => ({
+                        drillId: r.drill_id,
+                        slotDate: r.slot_date,
+                        slotTime: r.slot_time,
+                    }));
+                }
+            } catch { /* fallback */ }
+        }
+        const key = `${DRILL_REGISTRATIONS_KEY}_${userId}`;
+        const cached = getCached<DrillRegistration[]>(key);
+        return cached || [];
+    };
+    drillRegistrationsSlotsReadInFlight = run().finally(() => {
+        drillRegistrationsSlotsReadInFlight = null;
+    });
+    return drillRegistrationsSlotsReadInFlight;
+};
+
+export const registerForDrill = async (drillId: number, slot?: { date: string; time: string }): Promise<boolean> => {
+    const userId = getUserId();
+    const regs = await getUserDrillRegistrationsWithSlots();
+    if (regs.some(r => r.drillId === drillId)) return true;
+    const newReg: DrillRegistration = { drillId, slotDate: slot?.date, slotTime: slot?.time };
+    const updated = [...regs, newReg];
+    const key = `${DRILL_REGISTRATIONS_KEY}_${userId}`;
+    setCached(key, updated);
+    if (useSupabase() && supabase && !drillRegistrationsTableUnavailable) {
         try {
-            await supabase.from('drills').upsert({
-                id: newItem.id, title: newItem.title, date: newItem.date, type: newItem.type,
-                status: newItem.status, participants: newItem.participants, notes: newItem.notes
-            });
+            const { error } = await supabase.from('drill_registrations').upsert(
+                {
+                    user_id: userId,
+                    drill_id: drillId,
+                    slot_date: slot?.date ?? null,
+                    slot_time: slot?.time ?? null,
+                },
+                { onConflict: 'user_id,drill_id' }
+            );
+            if (error && isDrillRegistrationsMissingError(error)) {
+                drillRegistrationsTableUnavailable = true;
+            }
         } catch { /* saved locally */ }
     }
     return true;
+};
+
+export const unregisterFromDrill = async (drillId: number): Promise<boolean> => {
+    const userId = getUserId();
+    const regs = await getUserDrillRegistrationsWithSlots();
+    if (!regs.some(r => r.drillId === drillId)) return true;
+    const updated = regs.filter(r => r.drillId !== drillId);
+    const key = `${DRILL_REGISTRATIONS_KEY}_${userId}`;
+    setCached(key, updated);
+    if (useSupabase() && supabase && !drillRegistrationsTableUnavailable) {
+        try {
+            const { error } = await supabase
+                .from('drill_registrations')
+                .delete()
+                .eq('user_id', userId)
+                .eq('drill_id', drillId);
+            if (error && isDrillRegistrationsMissingError(error)) {
+                drillRegistrationsTableUnavailable = true;
+            }
+        } catch { /* saved locally */ }
+    }
+    return true;
+};
+
+// --- Drill Social (Comments, Like/Dislike, Share) ---
+
+const DRILL_COMMENTS_KEY = 'safesphere_drill_comments_v1';
+const DRILL_REACTIONS_KEY = 'safesphere_drill_reactions_v1';
+
+const getUserName = (): string => {
+    try {
+        const saved = localStorage.getItem('safesphere_user');
+        if (saved) {
+            const user = JSON.parse(saved);
+            if (user?.name) return user.name;
+            if (user?.email) return user.email.split('@')[0];
+        }
+    } catch { /* ignore */ }
+    return 'Anonymous';
+};
+
+export const fetchDrillComments = async (drillId: number): Promise<DrillComment[]> => {
+    const cached = getCached<Record<string, DrillComment[]>>(DRILL_COMMENTS_KEY);
+    const key = String(drillId);
+    const list = cached?.[key] ?? [];
+    return [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+};
+
+export const addDrillComment = async (drillId: number, content: string): Promise<DrillComment[]> => {
+    const cached = getCached<Record<string, DrillComment[]>>(DRILL_COMMENTS_KEY) ?? {};
+    const key = String(drillId);
+    const list = cached[key] ?? [];
+    const newComment: DrillComment = {
+        id: `c_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        drillId,
+        userId: getUserId(),
+        userName: getUserName(),
+        content: content.trim(),
+        createdAt: new Date().toISOString(),
+    };
+    const updated = [newComment, ...list];
+    cached[key] = updated;
+    setCached(DRILL_COMMENTS_KEY, cached);
+    return updated;
+};
+
+export const updateDrillComment = async (drillId: number, commentId: string, content: string): Promise<DrillComment[]> => {
+    const cached = getCached<Record<string, DrillComment[]>>(DRILL_COMMENTS_KEY) ?? {};
+    const key = String(drillId);
+    const list = cached[key] ?? [];
+    const idx = list.findIndex(c => c.id === commentId);
+    if (idx < 0) return list;
+    const comment = list[idx];
+    if (comment.userId !== getUserId()) return list; // Only author can edit
+    const updated = [...list];
+    updated[idx] = { ...comment, content: content.trim(), updatedAt: new Date().toISOString() };
+    cached[key] = updated;
+    setCached(DRILL_COMMENTS_KEY, cached);
+    return updated;
+};
+
+export const deleteDrillComment = async (drillId: number, commentId: string): Promise<DrillComment[]> => {
+    const cached = getCached<Record<string, DrillComment[]>>(DRILL_COMMENTS_KEY) ?? {};
+    const key = String(drillId);
+    const list = cached[key] ?? [];
+    const comment = list.find(c => c.id === commentId);
+    if (!comment || comment.userId !== getUserId()) return list; // Only author can delete
+    const updated = list.filter(c => c.id !== commentId);
+    cached[key] = updated;
+    setCached(DRILL_COMMENTS_KEY, cached);
+    return updated;
+};
+
+export const fetchDrillReactions = async (drillId: number): Promise<{ counts: Record<DrillReaction, number>; total: number; userReaction: DrillReaction | null }> => {
+    const cached = getCached<Record<string, Record<number, DrillReaction>>>(DRILL_REACTIONS_KEY) ?? {};
+    const byDrill = cached[String(drillId)] ?? cached[drillId] ?? {};
+    const reactions = Object.values(byDrill) as DrillReaction[];
+    const counts: Record<DrillReaction, number> = {
+        like: 0, love: 0, smile: 0, laugh: 0, sad: 0, cry: 0,
+    };
+    reactions.forEach(r => { if (r && counts[r] !== undefined) counts[r]++; });
+    const total = reactions.length;
+    const userReaction = (byDrill[getUserId()] ?? null) as DrillReaction | null;
+    return { counts, total, userReaction };
+};
+
+export const setDrillReaction = async (drillId: number, reaction: DrillReaction | null): Promise<{ counts: Record<DrillReaction, number>; total: number; userReaction: DrillReaction | null }> => {
+    const cached = getCached<Record<string, Record<number, DrillReaction>>>(DRILL_REACTIONS_KEY) ?? {};
+    const key = String(drillId);
+    if (!cached[key]) cached[key] = {};
+    const userId = getUserId();
+    if (reaction) {
+        cached[key][userId] = reaction;
+    } else {
+        delete cached[key][userId];
+    }
+    setCached(DRILL_REACTIONS_KEY, cached);
+    return fetchDrillReactions(drillId);
+};
+
+/** Get shareable URL for a drill (opens Prepare tab with drill detail) */
+export const getDrillShareUrl = (drillId: number): string => {
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${base}/?tab=prepare&drill=${drillId}`;
+};
+
+/** Notify user after cancelling drill registration */
+export const notifyCancelRegistration = async (
+    drillTitle: string,
+    t: (key: string) => string
+): Promise<void> => {
+    const { addNotification } = await import('./notificationService');
+    const title = t('cancellationConfirmed') || 'Cancellation confirmed';
+    const message = (t('cancelSuccessMessage') || 'You have cancelled {title} successfully.').replace('{title}', drillTitle);
+    addNotification({ type: 'info', title, message, linkTab: 'prepare' });
+};
+
+/** Notify user and optionally send email after drill registration */
+export const notifyDrillRegistration = async (
+    drillTitle: string,
+    slotDate: string,
+    slotTime: string,
+    t: (key: string) => string
+): Promise<void> => {
+    const { addNotification } = await import('./notificationService');
+    const title = t('bookingConfirmed') || 'Booking confirmed';
+    const message = (t('bookingSuccessMessage') || 'You have {title} booked successfully.').replace('{title}', drillTitle);
+    addNotification({ type: 'success', title, message, linkTab: 'prepare' });
+    const email = getUserEmail();
+    if (email && !isDemoUser(email)) {
+        try {
+            const { supabase } = await import('./supabase');
+            if (supabase) {
+                await supabase.functions.invoke('send-drill-confirmation', {
+                    body: { email, drillTitle, slotDate, slotTime },
+                });
+            }
+        } catch { /* Email optional - in-app notification is primary */ }
+    }
 };
 
 export const deleteDrill = async (id: number): Promise<boolean> => {
     const items = await fetchDrills();
     const updated = items.filter(i => i.id !== id);
     setCached(DRILLS_CACHE_KEY, updated);
-    if (useSupabase() && supabase) {
+    if (!isUsingDemoUser() && useSupabase() && supabase) {
         try {
             await supabase.from('drills').delete().eq('id', id);
         } catch { /* saved locally */ }
@@ -811,8 +1891,29 @@ export const deleteLearnItem = async (id: number): Promise<boolean> => {
 
 // --- TUTORIALS ---
 
-const TUTORIALS_CACHE_KEY = 'safesphere_tutorials';
+const TUTORIALS_CACHE_KEY = 'safesphere_tutorials_v3';
 const TUTORIAL_PROGRESS_KEY = 'safesphere_tutorial_progress';
+
+/** Supabase may only seed a subset of tutorials; fill missing standard ids from MOCK_TUTORIALS. */
+function mergeTutorialsWithDefaults(dbTutorials: Tutorial[]): Tutorial[] {
+    const byId = new Map<number, Tutorial>();
+    for (const t of dbTutorials) {
+        byId.set(t.id, { ...t });
+    }
+    for (const t of MOCK_TUTORIALS) {
+        if (!byId.has(t.id)) {
+            byId.set(t.id, { ...t });
+        }
+    }
+    const mockChoking = MOCK_TUTORIALS.find((m) => m.id === 6);
+    const sorted = Array.from(byId.values()).sort((a, b) => a.id - b.id);
+    return sorted.map((t) => {
+        if (t.id === 6 && mockChoking && /Nl0_D75MhzI/.test(t.url)) {
+            return { ...t, url: mockChoking.url, description: mockChoking.description };
+        }
+        return t;
+    });
+}
 
 const toTutorial = (row: { xp_reward?: number; [k: string]: unknown }): Tutorial => ({
     id: row.id as number,
@@ -828,7 +1929,7 @@ export const fetchTutorials = async (): Promise<Tutorial[]> => {
         try {
             const { data, error } = await supabase.from('tutorials').select('*').order('id');
             if (!error && data && data.length > 0) {
-                const items = data.map(toTutorial);
+                const items = mergeTutorialsWithDefaults(data.map(toTutorial));
                 setCached(TUTORIALS_CACHE_KEY, items);
                 return items;
             }
@@ -893,6 +1994,22 @@ export const completeTutorial = async (id: number): Promise<boolean> => {
     const completed = await fetchTutorialProgress();
     if (completed.includes(id)) return true;
     const updated = [...completed, id];
+    setCached(TUTORIAL_PROGRESS_KEY, updated);
+    const saved = localStorage.getItem('safesphere_user');
+    const userId = saved ? (JSON.parse(saved)?.id ?? 1) : 1;
+    if (useSupabase() && supabase) {
+        try {
+            await supabase.from('tutorial_progress').upsert({ user_id: userId, completed_ids: updated, updated_at: new Date().toISOString() });
+        } catch { /* saved locally */ }
+    }
+    return true;
+};
+
+/** Undo tutorial completion - allows users to redo preparation and earn XP again */
+export const uncompleteTutorial = async (id: number): Promise<boolean> => {
+    const completed = await fetchTutorialProgress();
+    if (!completed.includes(id)) return true;
+    const updated = completed.filter(c => c !== id);
     setCached(TUTORIAL_PROGRESS_KEY, updated);
     const saved = localStorage.getItem('safesphere_user');
     const userId = saved ? (JSON.parse(saved)?.id ?? 1) : 1;

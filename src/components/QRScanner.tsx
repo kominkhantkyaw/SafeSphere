@@ -2,13 +2,25 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Icons } from './Icon';
 import { useLanguage } from '../contexts/LanguageContext';
+import type { Resource } from '../types';
+import { DOWNTOWN_YANGON } from '../constants';
+import { fetchResources } from '../services/api';
 
 const READER_ID = 'safesphere-qr-reader';
+/** After the camera is live, wait this long then show nearby services (no real QR required). */
+const NEARBY_REVEAL_AFTER_MS = 2800;
+/**
+ * Stop the camera if no QR is decoded within this window (battery / UX).
+ * Change to `60 * 1000` for a 1-minute timeout.
+ */
+const QR_SCAN_IDLE_TIMEOUT_MS = 1 * 60 * 1000;
 
 interface QRScannerProps {
     isOpen: boolean;
     onClose: () => void;
     onScan?: (data: string) => void;
+    /** Parent closes scanner and opens Resources tab (full list / map). */
+    onViewAllResources?: () => void;
 }
 
 interface RescueCenter {
@@ -21,14 +33,42 @@ interface RescueCenter {
     status: 'available' | 'busy' | 'full';
 }
 
+/** Demo QR payloads — Yangon, Myanmar (matches MOCK_RESOURCES themes). */
 const RESCUE_CENTERS: RescueCenter[] = [
-    { id: 'SAFESPHERE-RC-001', name: 'City General Hospital', type: 'hospital', address: '123 Health Street, Medical District', phone: '+1 (555) 0123', distance: '0.8 km', status: 'available' },
-    { id: 'SAFESPHERE-RC-002', name: 'Community Emergency Center', type: 'shelter', address: '456 Community Blvd, Downtown', phone: '+1 (555) 0124', distance: '1.2 km', status: 'available' },
-    { id: 'SAFESPHERE-RC-003', name: 'Central Police Station', type: 'police', address: '789 Safety Avenue, Government Quarter', phone: '911 / +1 (555) 0125', distance: '1.5 km', status: 'available' },
-    { id: 'SAFESPHERE-RC-004', name: 'Fire Station #4', type: 'fire', address: '321 Rescue Road, Fire District', phone: '911 / +1 (555) 0126', distance: '2.1 km', status: 'available' },
-    { id: 'SAFESPHERE-RC-005', name: 'Memorial Hospital', type: 'hospital', address: '555 Medical Center Drive', phone: '+1 (555) 0127', distance: '3.4 km', status: 'busy' },
-    { id: 'SAFESPHERE-RC-006', name: 'Emergency Shelter - North', type: 'shelter', address: '777 North Street, Civic Center', phone: '+1 (555) 0128', distance: '4.2 km', status: 'available' },
+    { id: 'SAFESPHERE-RC-001', name: 'Yangon General Hospital (YGH)', type: 'hospital', address: 'Lanmadaw Street, Bahan Township, Yangon', phone: '+95 1 538 055', distance: '0.8 km', status: 'available' },
+    { id: 'SAFESPHERE-RC-002', name: 'People\'s Park relief point', type: 'shelter', address: 'Dhammazedi Road, Bahan Township, Yangon', phone: '+95 9 450 123456', distance: '1.1 km', status: 'available' },
+    { id: 'SAFESPHERE-RC-003', name: 'Kyauktada Township Police Station', type: 'police', address: 'Strand Road area, downtown Yangon', phone: '199', distance: '1.4 km', status: 'available' },
+    { id: 'SAFESPHERE-RC-004', name: 'Yangon Region Fire Services', type: 'fire', address: 'Lanmadaw / downtown corridor, Yangon', phone: '191', distance: '1.9 km', status: 'available' },
+    { id: 'SAFESPHERE-RC-005', name: 'Insein General Hospital', type: 'hospital', address: 'Insein Township, Yangon', phone: '+95 1 640 446', distance: '3.2 km', status: 'busy' },
+    { id: 'SAFESPHERE-RC-006', name: 'Thuwunna evacuation site', type: 'shelter', address: 'Thingangyun Township, Yangon', phone: '+95 9 790 123456', distance: '4.0 km', status: 'available' },
 ];
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+type NearbySvcType = 'hospital' | 'police' | 'fire' | 'shelter';
+
+function mapResourceType(rt: Resource['type']): NearbySvcType {
+    return rt === 'medical' ? 'hospital' : rt;
+}
+
+interface NearbyListItem {
+    id: number;
+    name: string;
+    type: NearbySvcType;
+    address: string;
+    phone: string;
+    distanceLabel: string;
+    sortKm: number;
+}
 
 function parseScannedData(data: string): { type: 'rescue' | 'url' | 'resource' | 'generic'; payload: RescueCenter | string } {
     const trimmed = data.trim();
@@ -71,7 +111,7 @@ function cleanupReaderDOM() {
     while (el.firstChild) el.removeChild(el.firstChild);
 }
 
-const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
+const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan, onViewAllResources }) => {
     const { t } = useLanguage();
     const [scanning, setScanning] = useState(false);
     const [scannedData, setScannedData] = useState<string | null>(null);
@@ -80,10 +120,25 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
     const [scanResultType, setScanResultType] = useState<'rescue' | 'url' | 'resource' | 'generic' | null>(null);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [toastMsg, setToastMsg] = useState<string | null>(null);
+    const [nearbyItems, setNearbyItems] = useState<NearbyListItem[]>([]);
+    const [nearbyLoading, setNearbyLoading] = useState(false);
+    const [nearbyLocNote, setNearbyLocNote] = useState<string | null>(null);
+    /** Nearby list is only loaded and shown after the initial “scan” phase (timed), not immediately on open. */
+    const [nearbyRevealed, setNearbyRevealed] = useState(false);
+    const [scanIdleTimedOut, setScanIdleTimedOut] = useState(false);
     const html5QrRef = useRef<Html5Qrcode | null>(null);
     const mountedRef = useRef(true);
     const startingRef = useRef(false);
     const onScanRef = useRef(onScan);
+    const scanIdleTimerRef = useRef<number | null>(null);
+    const hasScanResultRef = useRef(false);
+
+    const clearScanIdleTimer = useCallback(() => {
+        if (scanIdleTimerRef.current != null) {
+            clearTimeout(scanIdleTimerRef.current);
+            scanIdleTimerRef.current = null;
+        }
+    }, []);
 
     useEffect(() => { onScanRef.current = onScan; }, [onScan]);
     useEffect(() => {
@@ -91,9 +146,108 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
         return () => { mountedRef.current = false; };
     }, []);
 
+    /** Load nearby services only after `nearbyRevealed` (post-scan phase). */
+    useEffect(() => {
+        if (!isOpen || !nearbyRevealed) {
+            if (!isOpen) {
+                setNearbyItems([]);
+                setNearbyLoading(false);
+                setNearbyLocNote(null);
+            }
+            return;
+        }
+        let cancelled = false;
+        setNearbyLoading(true);
+        setNearbyLocNote(null);
+
+        const run = async () => {
+            try {
+                const resources = await fetchResources();
+                if (cancelled) return;
+
+                let userLat: number | null = null;
+                let userLng: number | null = null;
+                await new Promise<void>((resolve) => {
+                    if (!navigator.geolocation) {
+                        resolve();
+                        return;
+                    }
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            userLat = pos.coords.latitude;
+                            userLng = pos.coords.longitude;
+                            resolve();
+                        },
+                        () => {
+                            resolve();
+                        },
+                        { enableHighAccuracy: true, maximumAge: 60_000, timeout: 12_000 }
+                    );
+                });
+                if (cancelled) return;
+
+                // If GPS unavailable or denied, sort from downtown Yangon so distances stay local (Myanmar demo focus).
+                if (userLat == null || userLng == null) {
+                    userLat = DOWNTOWN_YANGON.lat;
+                    userLng = DOWNTOWN_YANGON.lng;
+                    if (!cancelled) setNearbyLocNote(t('qrNearbyYangonReference'));
+                }
+
+                const items: NearbyListItem[] = resources
+                    .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng) && !(r.lat === 0 && r.lng === 0))
+                    .map((r) => {
+                        let sortKm = 9999;
+                        let distanceLabel = '—';
+                        if (userLat != null && userLng != null) {
+                            sortKm = haversineKm(userLat, userLng, r.lat, r.lng);
+                            distanceLabel =
+                                sortKm < 1 ? `${Math.round(sortKm * 1000)} m` : `${sortKm.toFixed(1)} km`;
+                        } else if (r.distanceNum != null && Number.isFinite(r.distanceNum)) {
+                            sortKm = r.distanceNum;
+                            distanceLabel = r.distance || `${r.distanceNum.toFixed(1)} km`;
+                        } else if (r.distance) {
+                            distanceLabel = r.distance;
+                        }
+                        const phone = (r.phone || r.contactPhone || '').trim();
+                        return {
+                            id: r.id,
+                            name: r.name,
+                            type: mapResourceType(r.type),
+                            address: r.address,
+                            phone,
+                            distanceLabel,
+                            sortKm,
+                        };
+                    })
+                    .sort((a, b) => a.sortKm - b.sortKm)
+                    .slice(0, 8);
+
+                if (!cancelled) setNearbyItems(items);
+            } catch {
+                if (!cancelled) setNearbyItems([]);
+            } finally {
+                if (!cancelled) setNearbyLoading(false);
+            }
+        };
+
+        void run();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, nearbyRevealed, t]);
+
+    /** Simulate “scan complete” then reveal nearby list — real QR is optional. */
+    useEffect(() => {
+        if (!isOpen || !scanning || cameraError || scannedData || scanIdleTimedOut) return;
+        const id = window.setTimeout(() => setNearbyRevealed(true), NEARBY_REVEAL_AFTER_MS);
+        return () => clearTimeout(id);
+    }, [isOpen, scanning, cameraError, scannedData, scanIdleTimedOut]);
+
     const startCamera = useCallback(async () => {
         if (startingRef.current) return;
         startingRef.current = true;
+        clearScanIdleTimer();
+        hasScanResultRef.current = false;
 
         try {
             // 1. Tear down any previous instance
@@ -134,6 +288,8 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
             const onSuccess = (decodedText: string) => {
                 if (scanned) return;
                 scanned = true;
+                hasScanResultRef.current = true;
+                clearScanIdleTimer();
 
                 // Stop camera then process result
                 safeStop(html5Qr).then(() => {
@@ -211,7 +367,25 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                 throw new Error('Could not access any camera on this device.');
             }
 
+            hasScanResultRef.current = false;
+            clearScanIdleTimer();
+            scanIdleTimerRef.current = window.setTimeout(() => {
+                void (async () => {
+                    if (!mountedRef.current || hasScanResultRef.current) return;
+                    await safeStop(html5QrRef.current);
+                    html5QrRef.current = null;
+                    cleanupReaderDOM();
+                    if (!mountedRef.current || hasScanResultRef.current) return;
+                    setScanning(false);
+                    setScanIdleTimedOut(true);
+                    setToastMsg(t('qrScannerNotFoundNotify'));
+                    window.setTimeout(() => {
+                        if (mountedRef.current) setToastMsg(null);
+                    }, 4000);
+                })();
+            }, QR_SCAN_IDLE_TIMEOUT_MS);
         } catch (err) {
+            clearScanIdleTimer();
             if (!mountedRef.current) return;
             const msg = err instanceof Error ? err.message : String(err);
 
@@ -232,10 +406,11 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
         } finally {
             startingRef.current = false;
         }
-    }, [t]);
+    }, [t, clearScanIdleTimer]);
 
     useEffect(() => {
         if (!isOpen) {
+            clearScanIdleTimer();
             safeStop(html5QrRef.current).then(() => {
                 html5QrRef.current = null;
                 cleanupReaderDOM();
@@ -244,11 +419,13 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
         }
 
         setCameraError(null);
+        setScanIdleTimedOut(false);
         setScanning(true);
         setScannedData(null);
         setRescueCenter(null);
         setGenericContent(null);
         setScanResultType(null);
+        setNearbyRevealed(false);
 
         const timerId = setTimeout(() => {
             if (mountedRef.current) startCamera();
@@ -256,29 +433,117 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
 
         return () => {
             clearTimeout(timerId);
+            clearScanIdleTimer();
             safeStop(html5QrRef.current).then(() => {
                 html5QrRef.current = null;
                 cleanupReaderDOM();
             });
         };
-    }, [isOpen, startCamera]);
+    }, [isOpen, startCamera, clearScanIdleTimer]);
 
     const handleScanAgain = useCallback(() => {
+        clearScanIdleTimer();
+        setScanIdleTimedOut(false);
         setScannedData(null);
         setRescueCenter(null);
         setGenericContent(null);
         setScanResultType(null);
         setCameraError(null);
+        setNearbyRevealed(false);
         setScanning(true);
         setTimeout(() => {
             if (mountedRef.current) startCamera();
         }, 200);
-    }, [startCamera]);
+    }, [startCamera, clearScanIdleTimer]);
 
     const showToast = useCallback((msg: string) => {
         setToastMsg(msg);
         setTimeout(() => setToastMsg(null), 2500);
     }, []);
+
+    const nearbyResultsSection =
+        nearbyRevealed && !scannedData ? (
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50 p-3">
+                <div className="mb-2">
+                    <h3 className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wide">
+                        {t('qrNearbyEmergencyTitle')}
+                    </h3>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                        {t('qrNearbyEmergencyHint')}
+                    </p>
+                    {nearbyLocNote && (
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1">{nearbyLocNote}</p>
+                    )}
+                </div>
+                {nearbyLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 py-2">
+                        <Icons.RefreshCw className="animate-spin flex-shrink-0" size={14} />
+                        {t('qrNearbyLoading')}
+                    </div>
+                ) : nearbyItems.length > 0 ? (
+                    <>
+                        <ul className="max-h-40 overflow-y-auto space-y-2 pr-0.5 mb-2">
+                            {nearbyItems.map((item) => (
+                                <li
+                                    key={item.id}
+                                    className="rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900/80 p-2.5"
+                                >
+                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                        <span
+                                            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${
+                                                item.type === 'hospital'
+                                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                    : item.type === 'police'
+                                                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                                      : item.type === 'fire'
+                                                        ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                                                        : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                                            }`}
+                                        >
+                                            {item.type === 'hospital' && <Icons.Heart size={11} />}
+                                            {item.type === 'police' && <Icons.Shield size={11} />}
+                                            {item.type === 'fire' && <Icons.Flame size={11} />}
+                                            {item.type === 'shelter' && <Icons.Home size={11} />}
+                                            <span className="uppercase">{item.type}</span>
+                                        </span>
+                                        <span className="flex items-center gap-0.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 flex-shrink-0">
+                                            <Icons.MapPin size={11} className="text-blue-600" />
+                                            {item.distanceLabel}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight mb-1">
+                                        {item.name}
+                                    </p>
+                                    <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug mb-1">
+                                        {item.address}
+                                    </p>
+                                    {item.phone ? (
+                                        <a
+                                            href={`tel:${item.phone}`}
+                                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                                        >
+                                            <Icons.Phone size={12} />
+                                            {item.phone}
+                                        </a>
+                                    ) : null}
+                                </li>
+                            ))}
+                        </ul>
+                        {onViewAllResources ? (
+                            <button
+                                type="button"
+                                onClick={onViewAllResources}
+                                className="w-full py-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-xl transition-colors"
+                            >
+                                {t('qrNearbyOpenResources')}
+                            </button>
+                        ) : null}
+                    </>
+                ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 py-1">{t('qrNearbyEmpty')}</p>
+                )}
+            </div>
+        ) : null;
 
     if (!isOpen) return null;
 
@@ -315,13 +580,56 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                                 <p className="text-gray-700 dark:text-gray-200 font-medium mb-2">{t('cameraAccessFailed')}</p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-3 px-2">{cameraError}</p>
                                 <p className="text-xs text-gray-400 mb-4">{t('cameraHttpsHint')}</p>
-                                <button
-                                    onClick={handleScanAgain}
-                                    className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all inline-flex items-center gap-2"
-                                >
-                                    <Icons.RefreshCw size={16} />
-                                    {t('tryAgain')}
-                                </button>
+                                <div className="flex flex-col sm:flex-row gap-2 justify-center items-stretch sm:items-center">
+                                    <button
+                                        onClick={handleScanAgain}
+                                        className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all inline-flex items-center justify-center gap-2"
+                                    >
+                                        <Icons.RefreshCw size={16} />
+                                        {t('tryAgain')}
+                                    </button>
+                                    {!nearbyRevealed && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setNearbyRevealed(true)}
+                                            className="px-5 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all inline-flex items-center justify-center gap-2"
+                                        >
+                                            <Icons.MapPin size={16} />
+                                            {t('qrNearbyShowAnyway')}
+                                        </button>
+                                    )}
+                                </div>
+                                {nearbyResultsSection}
+                            </div>
+
+                        ) : scanIdleTimedOut && !scannedData ? (
+                            <div className="text-center py-6 space-y-3">
+                                <Icons.Pause size={44} className="text-amber-500 mx-auto mb-1" />
+                                <p className="text-gray-900 dark:text-white font-bold text-lg">{t('qrScannerNotFoundTitle')}</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 px-1 leading-relaxed">
+                                    {t('qrScannerNotFoundSubtitle')}
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-2 justify-center items-stretch sm:items-center pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleScanAgain}
+                                        className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 active:scale-95 transition-all inline-flex items-center justify-center gap-2"
+                                    >
+                                        <Icons.RefreshCw size={16} />
+                                        {t('tryAgain')}
+                                    </button>
+                                    {!nearbyRevealed && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setNearbyRevealed(true)}
+                                            className="px-5 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-all inline-flex items-center justify-center gap-2"
+                                        >
+                                            <Icons.MapPin size={16} />
+                                            {t('qrNearbyShowAnyway')}
+                                        </button>
+                                    )}
+                                </div>
+                                {nearbyResultsSection}
                             </div>
 
                         ) : scanning && !scannedData ? (
@@ -343,7 +651,9 @@ const QRScanner: React.FC<QRScannerProps> = ({ isOpen, onClose, onScan }) => {
                                         </div>
                                     </div>
                                 </div>
-                                <p className="text-center text-sm text-gray-500 dark:text-gray-400">{t('positionQrInFrame')}</p>
+                                <p className="text-center text-sm text-gray-500 dark:text-gray-400">{t('qrScannerNearbyAfterScan')}</p>
+                                <p className="text-center text-xs text-gray-400 dark:text-gray-500">{t('positionQrInFrame')}</p>
+                                {nearbyResultsSection}
                             </div>
 
                         ) : scannedData && (rescueCenter || genericContent !== null) ? (

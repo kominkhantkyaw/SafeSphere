@@ -167,6 +167,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                             label={t('directory')}
                             onClick={() => handleNavigate('directory')}
                         />
+                        <MenuItem
+                            icon={Icons.Layers}
+                            label={t('resourceHub')}
+                            onClick={() => handleNavigate('resources')}
+                        />
                         {(user.role === 'Admin' || user.role === 'Responder') && (
                             <MenuItem
                                 icon={Icons.Shield}

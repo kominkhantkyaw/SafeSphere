@@ -54,7 +54,7 @@ export function getRandomFloodZoneYangon(): { lat: number; lng: number } {
 }
 
 export const MOCK_USER: User = {
-    id: 1,
+    id: '550e8400-e29b-41d4-a716-446655440001',
     name: 'Admin',
     role: 'Admin', 
     safetyScore: 85,
@@ -117,106 +117,156 @@ export const MOCK_ALERTS: Alert[] = [
     }
 ];
 
+/**
+ * Emergency facilities for demo / offline mode — all coordinates in Yangon Region, Myanmar
+ * (earthquake, flood, cyclone, tsunami awareness for Lower Myanmar / Bay of Bengal context).
+ */
 export const MOCK_RESOURCES: Resource[] = [
     {
         id: 1,
-        name: 'Yangon General Hospital',
+        name: 'Yangon General Hospital (YGH)',
         type: 'medical',
-        address: 'Bahan Township, Yangon',
-        description: '24/7 Trauma Center',
-        phone: '555-0123',
-        lat: 16.8052,
+        address: 'Lanmadaw Street, Bahan Township, Yangon 11201',
+        description: 'Major public hospital — 24/7 emergency & trauma (illustrative demo data).',
+        phone: '+95 1 538 055',
+        lat: 16.8053,
         lng: 96.1457,
         capacity: 500,
         occupancy: 420,
         operatingHours: '24/7',
-        contactPerson: 'Dr. Smith',
-        contactPhone: '555-9999',
+        contactPerson: 'Emergency desk',
+        contactPhone: '192 (Ambulance, national)',
         urgency: 'Critical',
-        inFloodZone: false
+        inFloodZone: false,
     },
     {
         id: 2,
-        name: 'Yangon Fire Station',
+        name: 'Yangon Region Fire Services (Lanmadaw station area)',
         type: 'fire',
-        address: 'Downtown Yangon',
-        description: 'Fire & Rescue',
-        phone: '555-0124',
-        lat: 16.7822,
-        lng: 96.1558,
+        address: 'Lanmadaw Township, Yangon (near downtown corridor)',
+        description: 'Fire & rescue — national emergency 191.',
+        phone: '191',
+        lat: 16.7825,
+        lng: 96.1495,
         operatingHours: '24/7',
         urgency: 'High',
-        inFloodZone: false
+        inFloodZone: false,
     },
     {
         id: 3,
-        name: 'Community Relief Center',
-        type: 'shelter',
-        address: "People's Park, Bahan Township, Yangon",
-        description: 'Emergency shelter capacity: 200',
-        phone: '555-0199',
-        lat: 16.7935,
-        lng: 96.1405,
-        capacity: 200,
-        occupancy: 145,
-        operatingHours: '08:00 - 22:00',
-        contactPerson: 'Jane Doe',
-        notes: 'Back entrance reserved for staff.',
-        urgency: 'Medium',
-        inFloodZone: false
+        name: 'Kyauktada Township Police Station',
+        type: 'police',
+        address: 'Strand Road / downtown Kyauktada, Yangon',
+        description: 'Local police office — national police emergency 199.',
+        phone: '199',
+        lat: 16.7719,
+        lng: 96.1564,
+        operatingHours: '24/7',
+        urgency: 'High',
+        inFloodZone: true,
     },
     {
         id: 4,
-        name: 'City General Hospital',
+        name: 'Insein General Hospital',
         type: 'medical',
         address: 'Insein Township, Yangon',
-        description: '24/7 Emergency & General Care',
-        phone: '555-0150',
-        lat: 16.8920,
-        lng: 96.1120,
+        description: 'General & emergency care for northern Yangon.',
+        phone: '+95 1 640 446',
+        lat: 16.8921,
+        lng: 96.0978,
         capacity: 350,
         occupancy: 280,
         operatingHours: '24/7',
-        contactPerson: 'Dr. Aung',
+        contactPerson: 'Emergency unit',
         urgency: 'High',
-        inFloodZone: false
+        inFloodZone: false,
     },
     {
         id: 5,
-        name: 'Community Center',
-        type: 'shelter',
-        address: "People's Park, Bahan Township, Yangon",
-        description: 'Community assembly & relief hub',
-        phone: '555-0160',
-        lat: 16.7928,
-        lng: 96.1398,
-        capacity: 150,
-        occupancy: 80,
-        operatingHours: '06:00 - 22:00',
-        contactPerson: 'Ko Min',
-        urgency: 'Medium',
-        inFloodZone: false
+        name: 'North Okkalapa General Hospital',
+        type: 'medical',
+        address: 'North Okkalapa Township, Yangon',
+        description: 'Public hospital serving eastern Yangon.',
+        phone: '+95 1 695 026',
+        lat: 16.8778,
+        lng: 96.1836,
+        capacity: 280,
+        occupancy: 190,
+        operatingHours: '24/7',
+        urgency: 'High',
+        inFloodZone: false,
     },
     {
         id: 6,
-        name: 'Mandalay Shelter',
+        name: 'People\'s Park community relief point',
         type: 'shelter',
-        address: 'Mandalay Hill Rd',
-        description: 'Overflow Resettlement Area',
-        phone: '555-0200',
-        lat: 21.9550,
-        lng: 96.0900,
-        capacity: 300,
-        occupancy: 20,
-        operatingHours: 'Emergency Activation Only',
-        urgency: 'Low',
-        inFloodZone: false
-    }
+        address: 'People\'s Park, Dhammazedi Road, Bahan Township, Yangon',
+        description: 'Assembly & relief coordination point during floods / storms.',
+        phone: '+95 9 450 123456',
+        lat: 16.7935,
+        lng: 96.1405,
+        capacity: 200,
+        occupancy: 45,
+        operatingHours: 'Activated during disasters',
+        contactPerson: 'Relief desk',
+        urgency: 'Medium',
+        inFloodZone: false,
+    },
+    {
+        id: 7,
+        name: 'Thuwunna disaster evacuation site',
+        type: 'shelter',
+        address: 'Thuwunna, Thingangyun Township, Yangon',
+        description: 'Large indoor venue — used as evacuation / staging in exercises.',
+        phone: '+95 9 790 123456',
+        lat: 16.8254,
+        lng: 96.1842,
+        capacity: 800,
+        occupancy: 0,
+        operatingHours: 'When activated by TDMC / region',
+        urgency: 'Medium',
+        inFloodZone: false,
+    },
+    {
+        id: 8,
+        name: 'Dala Township river-crossing aid point',
+        type: 'shelter',
+        address: 'Near Dala ferry / Yangon River (south bank), Yangon Region',
+        description: 'Flood-prone area — coordination for river communities (demo scenario).',
+        phone: '+95 9 260 123456',
+        lat: 16.768,
+        lng: 96.119,
+        capacity: 120,
+        occupancy: 30,
+        operatingHours: 'High water / cyclone activation',
+        urgency: 'High',
+        inFloodZone: true,
+    },
+    {
+        id: 9,
+        name: 'Universitätsklinikum Klagenfurt (UKH)',
+        type: 'medical',
+        address: 'Fritsch am Berg 11, 9020 Klagenfurt am Wörthersee, Austria',
+        description:
+            'University hospital — 24/7 emergency (demo row: commonly referred to as UKH / LKH Klagenfurt).',
+        phone: '+43 50 536',
+        lat: 46.6172,
+        lng: 14.2654,
+        capacity: 600,
+        occupancy: 480,
+        operatingHours: '24/7',
+        contactPerson: 'Emergency admission',
+        urgency: 'High',
+        inFloodZone: false,
+    },
 ];
+
+/** Demo Reporter user id (see DEMO_CREDENTIALS reporter@safesphere.app) — mock incidents show under Reporter History / My submissions. */
+const DEMO_REPORTER_USER_ID = '550e8400-e29b-41d4-a716-446655440003';
 
 export const MOCK_REPORTS: IncidentReport[] = [
     {
-        id: 101,
+        id: '101',
         type: 'FLOOD',
         description: 'FLOOD (high) – Yangon River between Dala and Yangon Fire Station (west part)',
         lat: FLOOD_ZONES_YANGON[0].lat,
@@ -224,10 +274,11 @@ export const MOCK_REPORTS: IncidentReport[] = [
         status: 'active',
         timestamp: '22:15:00',
         urgency: 'High',
-        comments: []
+        comments: [],
+        reporterId: DEMO_REPORTER_USER_ID,
     },
     {
-        id: 102,
+        id: '102',
         type: 'FIRE',
         description: 'FIRE (Critical) – Downtown Yangon, commercial building near Sule Pagoda / Kyauktada',
         lat: DOWNTOWN_YANGON.lat,
@@ -235,10 +286,11 @@ export const MOCK_REPORTS: IncidentReport[] = [
         status: 'active',
         timestamp: '23:05:00',
         urgency: 'Critical',
-        comments: []
+        comments: [],
+        reporterId: DEMO_REPORTER_USER_ID,
     },
     {
-        id: 103,
+        id: '103',
         type: 'FLOOD',
         description: 'FLOOD (high) – Yangon River between Dala and Yangon Fire Station',
         lat: 16.776,
@@ -246,7 +298,8 @@ export const MOCK_REPORTS: IncidentReport[] = [
         status: 'active',
         timestamp: '23:27:06',
         urgency: 'High',
-        comments: []
+        comments: [],
+        reporterId: DEMO_REPORTER_USER_ID,
     }
 ];
 
@@ -284,9 +337,22 @@ export const MOCK_INJURIES: InjuryCase[] = [
 ];
 
 export const MOCK_DRILLS: DrillSession[] = [
-    { id: 1, title: 'Annual Fire Drill', date: '2023-11-15', type: 'Fire', status: 'Completed', participants: 120, notes: 'Evacuation time: 4 mins' },
-    { id: 2, title: 'Earthquake Simulation', date: '2024-06-20', type: 'Evacuation', status: 'Upcoming' },
-    { id: 3, title: 'Active Shooter Drill', date: '2024-08-10', type: 'Lockdown', status: 'Upcoming' },
+    { id: 1, title: 'Annual Fire Drill', date: '2024-12-15', time: '10:00', type: 'Fire', status: 'Completed', eventType: 'session', participants: 120, notes: 'Evacuation time: 4 mins' },
+    { id: 2, title: 'Earthquake Simulation', date: '2025-04-20', time: '14:00', type: 'Evacuation', status: 'Upcoming', eventType: 'session', slots: [
+        { date: '2025-04-20', time: '14:00' },
+        { date: '2025-04-22', time: '10:00' },
+        { date: '2025-04-25', time: '09:00' },
+    ]},
+    { id: 3, title: 'Active Shooter Drill', date: '2025-05-10', time: '09:00', type: 'Lockdown', status: 'Upcoming', eventType: 'session', slots: [
+        { date: '2025-05-10', time: '09:00' },
+        { date: '2025-05-12', time: '14:00' },
+    ]},
+    { id: 4, title: 'First Aid Certification', date: '2025-04-25', time: '13:00', type: 'Evacuation', status: 'Upcoming', eventType: 'appointment', slots: [
+        { date: '2025-04-25', time: '13:00' },
+        { date: '2025-04-27', time: '10:00' },
+        { date: '2025-04-30', time: '15:00' },
+    ]},
+    { id: 5, title: 'Emergency Kit Deadline', date: '2025-04-30', type: 'Fire', status: 'Upcoming', eventType: 'deadline' },
 ];
 
 export const MOCK_LEARN_ITEMS: LearnItem[] = [
@@ -299,4 +365,13 @@ export const MOCK_TUTORIALS: Tutorial[] = [
     { id: 3, title: 'Counsellor for Trauma', description: 'Helping someone hyperventilating during a panic attack.', source: 'YouTube', url: 'https://www.youtube.com/watch?v=1UWa124NfCc', xpReward: 25 },
     { id: 4, title: 'CPR & Defibrillator', description: 'How to perform CPR and use an AED.', source: 'YouTube', url: 'https://www.youtube.com/watch?v=WeY4KJUnfMc', xpReward: 30 },
     { id: 5, title: 'Emergency Evacuation', description: 'Be Red Cross Ready: 3 steps to preparedness.', source: 'YouTube', url: 'https://www.youtube.com/watch?v=MzaGbHkndts&t=15s', xpReward: 20 },
+    {
+        id: 6,
+        title: 'Choking first aid (adult)',
+        description:
+            'American Red Cross: how to help when an adult is choking and becomes unresponsive—chest compressions, airway checks, and rescue breaths.',
+        source: 'YouTube',
+        url: 'https://www.youtube.com/watch?v=9pTnepZd5as',
+        xpReward: 20,
+    },
 ];

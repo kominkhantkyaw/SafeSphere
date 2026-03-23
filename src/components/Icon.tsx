@@ -93,7 +93,10 @@ import {
     House,
     PanelLeft,
     RefreshCw,
-    Link
+    Link,
+    RotateCcw,
+    CalendarCheck,
+    Sticker
 } from 'lucide-react';
 
 /** Google "G" logo for OAuth button */
@@ -200,6 +203,7 @@ export const Icons = {
     Info,
     Satellite,
     Eye,
+    EyeOff,
     Droplets,
     Wind,
     TrendingUp,
@@ -210,5 +214,9 @@ export const Icons = {
     Siren,
     PanelLeft,
     RefreshCw,
-    Link
+    Link,
+    Undo: RotateCcw,
+    CalendarCheck,
+    Booked: CalendarCheck,
+    Sticker,
 };

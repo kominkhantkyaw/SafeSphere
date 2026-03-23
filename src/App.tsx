@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { UserProvider, useUser } from './contexts/UserContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
@@ -28,6 +26,8 @@ import Footer from './components/Footer';
 import { Icons } from './components/Icon';
 import { ThemeSettings as ThemeSettingsType, User } from './types';
 import { getInstallPromptAvailable, installPWA } from './pwa-install';
+import { getOfflineQueueSummary, syncOfflineQueue } from './services/offlineQueue';
+import { PasswordRecoveryModal } from './components/PasswordRecoveryModal';
 
 /** Tabs that show back button and hide footer/bottom nav (Learn, Settings, Privacy, Profile show Footer) */
 const BACK_ENABLED_TABS = ['admin', 'resources', 'notifications', 'directory'] as const;
@@ -71,15 +71,37 @@ const AppContent: React.FC = () => {
     // -- App State --
     const [activeTab, setActiveTab] = useState('home');
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
+    const [offlineQueuePendingCount, setOfflineQueuePendingCount] = useState(0);
     const [notificationCount, setNotificationCount] = useState(3); // Demo notification count
     const [installAvailable, setInstallAvailable] = useState(getInstallPromptAvailable);
     const [installBannerDismissed, setInstallBannerDismissed] = useState(() =>
         typeof sessionStorage !== 'undefined' && sessionStorage.getItem('safesphere-install-banner-dismissed') === '1'
     );
 
+    // Read shared drill link from URL (?tab=prepare&drill=123)
+    const [initialDrillId, setInitialDrillId] = useState<number | null>(null);
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        const drillId = params.get('drill');
+        if (tab === 'prepare' && drillId) {
+            setActiveTab('prepare');
+            const id = parseInt(drillId, 10);
+            if (!isNaN(id)) setInitialDrillId(id);
+            // Clean URL without full reload
+            try {
+                window.history.replaceState({}, '', window.location.pathname || '/');
+            } catch { /* ignore */ }
+        }
+    }, []);
+
     // -- Effects --
     useEffect(() => {
-        const handleOnline = () => setIsOffline(false);
+        const handleOnline = async () => {
+            setIsOffline(false);
+            const res = await syncOfflineQueue();
+            setOfflineQueuePendingCount(res.pendingCount);
+        };
         const handleOffline = () => setIsOffline(true);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
@@ -87,6 +109,25 @@ const AppContent: React.FC = () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
+    }, []);
+
+    // Load offline queue size (for UI banner)
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const summary = await getOfflineQueueSummary();
+            if (!cancelled) setOfflineQueuePendingCount(summary.pendingCount);
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    // If we start with a queue while already online, try replay immediately.
+    useEffect(() => {
+        if (!navigator.onLine) return;
+        (async () => {
+            const res = await syncOfflineQueue();
+            setOfflineQueuePendingCount(res.pendingCount);
+        })();
     }, []);
 
     // Handle menu tab click - open sidebar and reset to home
@@ -164,9 +205,9 @@ const AppContent: React.FC = () => {
             setInstallBannerDismissed(false);
             return;
         }
-        // Create a user object with demo data for existing users
+        // Create a user object with demo data for existing users (role-based permissions)
         const demoUser: User = {
-            id: 1,
+            id: role === 'Admin' ? '550e8400-e29b-41d4-a716-4466554400a0' : role === 'Responder' ? '550e8400-e29b-41d4-a716-4466554400a1' : '550e8400-e29b-41d4-a716-4466554400a2',
             name: role === 'Admin' ? 'Admin User' : role === 'Responder' ? 'Responder User' : 'Reporter User',
             role: role as User['role'],
             safetyScore: 85,
@@ -178,6 +219,8 @@ const AppContent: React.FC = () => {
             skills: role === 'Admin' ? ['Emergency Management', 'First Aid', 'Crisis Communication'] :
                    role === 'Responder' ? ['First Aid', 'CPR Certified', 'Search & Rescue'] :
                    ['First Aid'],
+            permissions: role === 'Admin' ? ['approve_reports', 'manage_users', 'edit_resources'] :
+                         role === 'Responder' ? ['approve_reports'] : [],
             emergencyContactName: 'Emergency Contact',
             emergencyContactPhone: '+1 234 567 8901'
         };
@@ -234,7 +277,7 @@ const AppContent: React.FC = () => {
         switch (activeTab) {
             case 'home': return <Home onNavigate={setActiveTab} onOpenSystemStatus={() => setShowSystemStatus(true)} />;
             case 'emergency': return <Emergency />;
-            case 'prepare': return <Prepare onNavigate={setActiveTab} />;
+            case 'prepare': return <Prepare onNavigate={setActiveTab} initialDrillId={initialDrillId} onDrillOpened={() => setInitialDrillId(null)} />;
             case 'resources': return <Resources />;
             case 'maps': return <Maps />;
             case 'admin': return (user?.role === 'Admin' || user?.role === 'Responder') ? <Admin /> : <Home onNavigate={setActiveTab} onOpenSystemStatus={() => setShowSystemStatus(true)} />;
@@ -242,7 +285,7 @@ const AppContent: React.FC = () => {
             case 'settings': return <Settings onBack={() => setActiveTab('home')} onNavigate={setActiveTab} theme={theme} onThemeUpdate={setTheme} onThemeSettingsClick={() => setShowThemeSettings(true)} />;
             case 'chat': return <Chat />;
             case 'privacy': return <PrivacyPolicy onBack={() => setActiveTab('home')} />;
-            case 'notifications': return <Notifications onBack={() => setActiveTab('home')} onNavigateToMap={() => setActiveTab('maps')} />;
+            case 'notifications': return <Notifications onBack={() => setActiveTab('home')} onNavigateToMap={() => setActiveTab('maps')} onNavigateToPrepare={() => setActiveTab('prepare')} />;
             case 'directory': return <Directory onBack={() => setActiveTab('home')} />;
             case 'learn': return <Learn onBack={() => setActiveTab('home')} onNavigate={setActiveTab} />;
             case 'menu': return <Menu onNavigate={setActiveTab} onThemeSettingsClick={() => setShowThemeSettings(true)} onBack={() => setActiveTab('home')} />;
@@ -271,6 +314,7 @@ const AppContent: React.FC = () => {
                            activeTab === 'settings' ? t('settings') : 
                            activeTab === 'chat' ? t('messages') :
                            activeTab === 'directory' ? t('directory') :
+                           activeTab === 'resources' ? t('resourceHub') :
                            activeTab === 'notifications' ? t('notifications') :
                            activeTab === 'learn' ? theme.appName :
                            activeTab === 'menu' ? t('menu') :
@@ -290,11 +334,31 @@ const AppContent: React.FC = () => {
                 />
             </div>
             
-            {/* Offline Banner */}
+            {/* Offline Banner — aria-live for screen readers (WCAG 4.1.3) */}
             {isOffline && (
-                <div className="bg-gray-800 text-white text-xs py-1 px-4 text-center flex items-center justify-center gap-2 animate-in slide-in-from-top">
-                    <Icons.Wifi size={12} className="opacity-50" />
-                    <span>{t('offlineBanner')}</span>
+                <div
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className="bg-gray-800 text-white text-xs py-1 px-4 text-center flex items-center justify-center gap-2 animate-in slide-in-from-top"
+                >
+                    <Icons.Wifi size={12} className="opacity-50" aria-hidden />
+                    <span>
+                        {t('offlineBanner')}
+                        {offlineQueuePendingCount > 0 ? ` • Queue: ${offlineQueuePendingCount} pending` : ''}
+                    </span>
+                </div>
+            )}
+
+            {/* Offline Queue Banner (even when online, while replay is pending) */}
+            {!isOffline && offlineQueuePendingCount > 0 && (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className="bg-amber-600 text-white text-xs py-1 px-4 text-center flex items-center justify-center gap-2 animate-in slide-in-from-top"
+                >
+                    <span>Offline queue: {offlineQueuePendingCount} pending • syncing...</span>
                 </div>
             )}
 
@@ -373,6 +437,10 @@ const AppContent: React.FC = () => {
             <QRScanner 
                 isOpen={showQRScanner}
                 onClose={() => setShowQRScanner(false)}
+                onViewAllResources={() => {
+                    setShowQRScanner(false);
+                    setActiveTab('resources');
+                }}
                 onScan={(data) => {
                     console.log('Scanned:', data);
                     const trimmed = data.trim();
@@ -411,6 +479,7 @@ const App: React.FC = () => {
     return (
         <LanguageProvider>
             <UserProvider>
+                <PasswordRecoveryModal />
                 <AppContent />
             </UserProvider>
         </LanguageProvider>

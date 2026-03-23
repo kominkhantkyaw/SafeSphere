@@ -35,6 +35,15 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 1. In Supabase Dashboard, open **SQL Editor**
 2. Run **safesphere_postgres.sql** (includes base schema + migrations: tutorials, learn_items, RLS policies)
 
+### 3b. UUID incident reports (offline–online sync)
+
+The app **upserts** `incident_reports` with a **client-generated UUID** `id` and a **`reporterId` UUID** equal to the signed-in user’s Supabase Auth id (`auth.uid()`). If your database still uses `SERIAL` / integer `id` or non-UUID `reporterId`, online sync will fail until you migrate.
+
+- Read **`backend/supabase/migrations/20250318120000_incident_reports_uuid.sql`** (reference DDL + commented migration steps).
+- For a full narrative, see **`SCHEMA_MIGRATION_SQL.md`** at the repo root.
+
+After migrating, ensure RLS policies allow reporters to **read** their own rows (by `"reporterId" = auth.uid()` or equivalent) so **Emergency → History** works.
+
 ### 4. Seed initial data (optional)
 
 Your schema already has sample data for alerts, checklist, incident_reports, resources. The app will use it when online.
