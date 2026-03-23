@@ -296,6 +296,16 @@ function isCaptchaSiteSecretMismatchMessage(msg: string | null | undefined): boo
     return /sitekey[\s_-]*secret[\s_-]*mismatch/i.test(msg);
 }
 
+/** Supabase Auth password policy / strength rejection (not an email or captcha issue). */
+function isPasswordPolicyAuthMessage(msg: string | null | undefined): boolean {
+    if (!msg) return false;
+    return (
+        /password.*(contain|character|upper|lower|digit|number|special|weak)/i.test(msg) ||
+        /at least one character of each/i.test(msg) ||
+        /password.*too (short|weak|simple)/i.test(msg)
+    );
+}
+
 export type SignUpEmailIssueKind = 'captcha' | 'captcha_mismatch' | 'smtp' | 'config';
 
 /** Request a new account — creates user in Supabase Auth (email confirmation) + optional SMS. */
@@ -357,6 +367,14 @@ export const requestAccount = async (data: {
             signUpErrorMessage = failMsg;
             if (import.meta.env.DEV) {
                 console.warn('[Auth] Supabase signUp error:', failMsg);
+            }
+            if (isPasswordPolicyAuthMessage(failMsg)) {
+                return {
+                    success: false,
+                    message:
+                        failMsg ||
+                        'Password does not meet the requirements set in Supabase (try upper and lower case, a number, and a special character).',
+                };
             }
             if (failMsg.includes('already registered') || failMsg.includes('already been registered')) {
                 await resendSignUpConfirmation(data.email.trim(), data.captchaToken).catch(() => {});
@@ -486,7 +504,7 @@ export const requestAccount = async (data: {
                             ? 'VITE_TURNSTILE_SITE_KEY'
                             : 'VITE_HCAPTCHA_SITE_KEY';
                     emailDeliveryHint =
-                        `Supabase rejected the captcha (${signUpErrorMessage || 'sitekey-secret-mismatch'}): the ${prov} secret stored under Authentication → Attack Protection does not belong to the same ${prov} site as ${envKey} in your environment. Open your ${prov} dashboard, find the site that owns this site key, copy its secret into Supabase, and ensure Attack Protection is set to ${prov} (not the other provider). Restart the dev server after changing .env.local.`;
+                        `Supabase rejected the captcha (${signUpErrorMessage || 'sitekey-secret-mismatch'}): the ${prov} secret under Authentication → Attack Protection must belong to the same ${prov} site as ${envKey} in your environment (copy both from one site in the ${prov} dashboard; provider must be ${prov}, not the other). Restart the dev server after changing .env.local. Redirect URLs (e.g. http://localhost:3000/) do not fix this error — they only matter for confirmation/reset links after sign-up already succeeds.`;
                 } else {
                     emailDeliveryHint =
                         `Supabase refused sign-up (${signUpErrorMessage || 'captcha verification failed'}). No confirmation email is sent until sign-up succeeds. Complete the captcha widget again (tokens expire quickly), then tap Request Account once more. If this persists, confirm the same provider (Turnstile vs hCaptcha) is selected in Supabase as in your .env.local.`;

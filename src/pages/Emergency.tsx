@@ -8,6 +8,7 @@ import ReportTriageBarV2, { type ReportProgressStep, type ReportTriageKind } fro
 import { useLanguage } from '../contexts/LanguageContext';
 import { useUser } from '../contexts/UserContext';
 import { sendSosViaBluetooth } from '../services/bleDistress';
+import { announceSosLocationSpeech, startSosLocalAlarm, stopSosLocalAlarm } from '../services/sosLocalAlarm';
 
 /** Search + filter row under Reports / Active / History (see Report_UI_Layout.md). */
 const EmergencyListToolbar: React.FC<{
@@ -447,7 +448,21 @@ const Emergency: React.FC = () => {
         return () => window.removeEventListener('safesphere-offline-queue-synced', handleQueueSynced);
     }, []);
 
-    // BLE SOS sender: runs only when the SOS screen is active and GPS location is available.
+    // Loud local alarm (siren + vibration + optional speech) while SOS is active — works without BLE.
+    useEffect(() => {
+        if (emergencyState !== 'sos') return;
+        startSosLocalAlarm();
+        return () => stopSosLocalAlarm();
+    }, [emergencyState]);
+
+    // Speak GPS once when coordinates become available (after user gesture from SOS tap).
+    useEffect(() => {
+        if (emergencyState !== 'sos') return;
+        if (sosLocationStatus !== 'ok' || !sosLocation) return;
+        announceSosLocationSpeech(sosLocation.lat, sosLocation.lng);
+    }, [emergencyState, sosLocationStatus, sosLocation]);
+
+    // BLE SOS: after GPS is ready, open the device picker and write to a responder-capable GATT characteristic.
     useEffect(() => {
         if (emergencyState !== 'sos') return;
         if (sosLocationStatus !== 'ok') return;
@@ -546,18 +561,20 @@ const Emergency: React.FC = () => {
                                 : t('broadcastingSignal')}
                 </p>
                 
-                <div className="bg-white/10 p-6 rounded-2xl w-full max-w-sm mb-8 backdrop-blur-md border border-white/20">
-                    <div className="flex items-center gap-3 mb-3 text-red-50">
+                <div className="bg-white/10 p-6 rounded-2xl w-full max-w-sm mb-6 backdrop-blur-md border border-white/20 space-y-3">
+                    <p className="text-xs text-red-100/95 leading-snug">{t('sosLocalAudibleHint')}</p>
+                    <p className="text-xs text-red-100/90 leading-snug border-t border-white/15 pt-3">{t('sosBluetoothDeviceHint')}</p>
+                    <div className="flex items-center gap-3 text-red-50 pt-1">
                         <Icons.MapPin size={20} />
-                        <span className="font-mono">
+                        <span className="font-mono text-sm">
                             {sosLocationStatus === 'fetching' && t('gettingLocation')}
                             {sosLocationStatus === 'ok' && sosLocation && `Lat: ${sosLocation.lat.toFixed(4)}, Lng: ${sosLocation.lng.toFixed(4)}`}
                             {sosLocationStatus === 'error' && t('locationUnavailable')}
                         </span>
                     </div>
-                    <div className="flex items-center gap-3 text-red-50">
-                        <Icons.Wifi size={20} />
-                        <span>
+                    <div className="flex items-start gap-3 text-red-50">
+                        <Icons.Wifi size={20} className="shrink-0 mt-0.5" />
+                        <span className="text-sm">
                             {bleState === 'sent'
                                 ? t('emergencyNotified')
                                 : bleState === 'failed'
@@ -586,6 +603,7 @@ const Emergency: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => {
+                            stopSosLocalAlarm();
                             setEmergencyState('normal');
                             setSosLocation(null);
                             setSosLocationStatus('ok');
@@ -601,7 +619,14 @@ const Emergency: React.FC = () => {
                 )}
 
                 <button 
-                    onClick={() => { setEmergencyState('normal'); setSosLocation(null); setSosLocationStatus('ok'); setBleState('idle'); setBleError(null); }}
+                    onClick={() => {
+                        stopSosLocalAlarm();
+                        setEmergencyState('normal');
+                        setSosLocation(null);
+                        setSosLocationStatus('ok');
+                        setBleState('idle');
+                        setBleError(null);
+                    }}
                     className="w-full max-w-sm py-4 bg-white text-red-600 rounded-2xl font-bold text-lg shadow-xl hover:bg-red-50 transition-colors"
                 >
                     {t('cancelAlert')}

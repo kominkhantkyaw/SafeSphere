@@ -333,6 +333,10 @@ const translations = {
         sosActivated: 'SOS ACTIVATED',
         emergencyNotified: 'Emergency services have been notified of your location.',
         broadcastingSignal: 'Broadcasting signal...',
+        sosLocalAudibleHint:
+            'This phone is playing a loud alert and vibration so people nearby can find you. Turn volume up if needed.',
+        sosBluetoothDeviceHint:
+            'Bluetooth: pick a dedicated SafeSphere / rescue receiver or a Nordic UART BLE dongle — not a TV or random phone (they usually cannot accept SOS data).',
         gettingLocation: 'Getting your live location...',
         locationUnavailable: 'Location unavailable (enable GPS)',
         cancelAlert: 'Cancel Alert',
@@ -1746,6 +1750,10 @@ const translations = {
         sosActivated: 'SOS AKTIVIERT',
         emergencyNotified: 'Rettungsdienste wurden über Ihren Standort informiert.',
         broadcastingSignal: 'Signal wird gesendet...',
+        sosLocalAudibleHint:
+            'Dieses Telefon gibt einen lauten Alarm und Vibration aus, damit Sie in der Nähe gefunden werden. Lautstärke ggf. erhöhen.',
+        sosBluetoothDeviceHint:
+            'Bluetooth: Wählen Sie einen SafeSphere-/Rettungs-Empfänger oder einen Nordic-UART-BLE-Dongle — nicht einen Fernseher oder ein beliebiges Telefon (meist kein SOS-Datenkanal).',
         gettingLocation: 'Live-Standort wird ermittelt...',
         locationUnavailable: 'Standort nicht verfügbar (GPS aktivieren)',
         cancelAlert: 'Alarm abbrechen',
@@ -3142,6 +3150,10 @@ const translations = {
         sosActivated: 'အရေးပေါ်ဖွင့်ပြီး',
         emergencyNotified: 'အရေးပေါ်ဝန်ဆောင်မှုများအား သင့်တည်နေရာကို အကြောင်းကြားပြီးပါပြီ။',
         broadcastingSignal: 'သတင်းအချက်အလက် ထုတ်လွှင့်နေသည်...',
+        sosLocalAudibleHint:
+            'ဤဖုန်းသည် အနီးအနားရှိလူများ သင့်ကို ရှာဖွေရန် အသံသတိပေးချက် ဗြိတိန်ကို ဖွင့်ထားသည်။ အသံအတိုးမြှင့်ပါ။',
+        sosBluetoothDeviceHint:
+            'Bluetooth: SafeSphere/ကယ်ဆယ်ရေးလက်ခံချက် သို့ Nordic UART BLE dongle ကိုသာ ရွေးပါ — တီဗီ သို့မဟုတ် ဖုန်းအမျိုးအစားမရွေးပါနှင့် (SOS ဒေတာမလက်ခံလေ့မရှိ)။',
         gettingLocation: 'သင့်လက်ရှိပြ တည်နေရာ ရယူနေသည်...',
         locationUnavailable: 'တည်နေရာ မရနိုင်ပါ (GPS ဖွင့်ပါ)',
         cancelAlert: 'သတိပေးချက် ပယ်ဖျက်ပါ',
