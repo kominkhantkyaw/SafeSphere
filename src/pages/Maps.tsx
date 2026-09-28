@@ -4,6 +4,7 @@ import { EarthquakeEvent, SafetyAsset, IncidentReport, Resource, User } from '..
 import { fetchEarthquakes, fetchSafetyAssets, fetchReports, fetchResources, fetchAllUsers, saveUser } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { escapeHtml } from '../services/crypto';
+import { attachCartoTileFallback, getCartoBaseMapConfig, getOpenStreetMapConfig, hasCartoBasemapKey } from '../config/maps';
 
 declare global {
   interface Window {
@@ -207,7 +208,6 @@ const Maps: React.FC = () => {
         if (!mapInstance.current) {
             mapInstance.current = window.L.map(mapContainer.current, {
                 zoomControl: false,
-                attributionControl: false
             }).setView(MYANMAR_CENTER, 6);
 
             window.L.control.zoom({ position: 'bottomright' }).addTo(mapInstance.current);
@@ -219,18 +219,31 @@ const Maps: React.FC = () => {
         }
 
         let tileUrl = '';
+        let tileAttribution = '';
         if (baseMap === 'light') {
-            tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+            ({ url: tileUrl, attribution: tileAttribution } = getCartoBaseMapConfig('light'));
         } else if (baseMap === 'dark') {
-            tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+            ({ url: tileUrl, attribution: tileAttribution } = getCartoBaseMapConfig('dark'));
         } else {
             tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+            tileAttribution = 'Tiles &copy; Esri';
         }
 
         tileLayerRef.current = window.L.tileLayer(tileUrl, {
             maxZoom: 20,
-            subdomains: 'abcd'
+            attribution: tileAttribution,
         }).addTo(mapInstance.current);
+        if (baseMap !== 'satellite' && hasCartoBasemapKey) {
+            attachCartoTileFallback(
+                tileLayerRef.current,
+                mapInstance.current,
+                () => window.L.tileLayer(getOpenStreetMapConfig().url, {
+                    maxZoom: 20,
+                    attribution: getOpenStreetMapConfig().attribution,
+                }),
+                (fallbackLayer) => { tileLayerRef.current = fallbackLayer; },
+            );
+        }
 
         // Focus on location when navigated from Home (chart point click)
         try {
@@ -938,6 +951,15 @@ const Maps: React.FC = () => {
                         {t('liveCommandMap')}
                     </h1>
                 </div>
+
+                {!hasCartoBasemapKey && baseMap !== 'satellite' && (
+                    <div
+                        role="status"
+                        className="pointer-events-auto absolute top-16 left-0 max-w-[min(28rem,calc(100vw-2rem))] rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 shadow-lg"
+                    >
+                        CARTO basemap key not configured. Using OpenStreetMap fallback tiles. Add <code>VITE_CARTO_BASEMAP_KEY</code> to enable the light and dark CARTO styles.
+                    </div>
+                )}
 
                 <div className="pointer-events-auto flex flex-col gap-2">
                     <button 

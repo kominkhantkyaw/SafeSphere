@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DOWNTOWN_YANGON } from '../constants';
 import { IncidentReport, Resource } from '../types';
+import { attachCartoTileFallback, getCartoBaseMapConfig, getOpenStreetMapConfig, hasCartoBasemapKey } from '../config/maps';
 
 declare global {
   interface Window {
@@ -50,11 +51,21 @@ const IncidentMap: React.FC<IncidentMapProps> = ({
         if (!mapInstance.current) {
             mapInstance.current = window.L.map(mapContainer.current).setView([centerLat, centerLng], 12);
             
-            window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                subdomains: 'abcd',
+            const baseMap = getCartoBaseMapConfig('light');
+            const tileLayer = window.L.tileLayer(baseMap.url, {
+                attribution: baseMap.attribution,
                 maxZoom: 20
             }).addTo(mapInstance.current);
+            if (hasCartoBasemapKey) {
+                attachCartoTileFallback(
+                    tileLayer,
+                    mapInstance.current,
+                    () => window.L.tileLayer(getOpenStreetMapConfig().url, {
+                        attribution: getOpenStreetMapConfig().attribution,
+                        maxZoom: 20,
+                    }),
+                );
+            }
         } else {
              mapInstance.current.setView([centerLat, centerLng], 12);
         }

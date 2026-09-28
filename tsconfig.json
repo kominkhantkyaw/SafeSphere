@@ -15,7 +15,8 @@
     "types": [
       "node",
       "vitest/globals",
-      "@testing-library/jest-dom"
+      "@testing-library/jest-dom",
+      "web-bluetooth"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,

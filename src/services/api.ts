@@ -730,7 +730,7 @@ export const fetchAlerts = async (): Promise<Alert[]> => {
     if (useSupabase() && supabase) {
         try {
             const { data, error } = await supabase.from('alerts').select('*').order('id', { ascending: false });
-            if (!error && data && data.length > 0) {
+            if (!error && data != null) {
                 const serverAlerts = data as Alert[];
                 const cached = getCached<Alert[]>(ALERTS_CACHE_KEY);
                 const merged = mergeFetchedAlertsWithCache(serverAlerts, cached);
@@ -953,7 +953,7 @@ export const fetchResources = async (): Promise<Resource[]> => {
     if (useSupabase() && supabase) {
         try {
             const { data, error } = await supabase.from('resources').select('*').order('id');
-            if (!error && data && data.length > 0) {
+            if (!error && data != null) {
                 const items = data.map(toResource);
                 if (shouldReplaceResourcesWithYangonMock(items)) {
                     return useYangonMock();

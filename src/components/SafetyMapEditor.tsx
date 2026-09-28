@@ -4,6 +4,7 @@ import { Icons } from './Icon';
 import { useLanguage } from '../contexts/LanguageContext';
 import { SafetyAsset } from '../types';
 import { fetchSafetyAssets, submitSafetyAsset, deleteSafetyAsset } from '../services/api';
+import { attachCartoTileFallback, getCartoBaseMapConfig, getOpenStreetMapConfig, hasCartoBasemapKey } from '../config/maps';
 
 declare global {
     interface Window {
@@ -88,19 +89,31 @@ const SafetyMapEditor: React.FC = () => {
             }
 
             let tileUrl: string;
+            let tileAttribution: string;
             if (baseMap === 'light') {
-                tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+                ({ url: tileUrl, attribution: tileAttribution } = getCartoBaseMapConfig('light'));
             } else if (baseMap === 'dark') {
-                tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+                ({ url: tileUrl, attribution: tileAttribution } = getCartoBaseMapConfig('dark'));
             } else {
                 tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+                tileAttribution = 'Tiles &copy; Esri';
             }
 
             tileLayerRef.current = window.L.tileLayer(tileUrl, {
-                attribution: baseMap === 'satellite' ? 'Esri' : 'OpenStreetMap',
-                subdomains: 'abcd',
+                attribution: tileAttribution,
                 maxZoom: 20
             }).addTo(mapInstance.current);
+            if (baseMap !== 'satellite' && hasCartoBasemapKey) {
+                attachCartoTileFallback(
+                    tileLayerRef.current,
+                    mapInstance.current,
+                    () => window.L.tileLayer(getOpenStreetMapConfig().url, {
+                        attribution: getOpenStreetMapConfig().attribution,
+                        maxZoom: 20,
+                    }),
+                    (fallbackLayer) => { tileLayerRef.current = fallbackLayer; },
+                );
+            }
 
             if (typeof mapInstance.current.invalidateSize === 'function') {
                 mapInstance.current.invalidateSize();
