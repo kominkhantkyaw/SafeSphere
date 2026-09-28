@@ -1,7 +1,13 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Icons } from '../components/Icon';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getAiSafetyReply, isAiChatAvailable, QUOTA_EXCEEDED_MESSAGE } from '../services/aiChat';
+import {
+    AI_NOT_CONFIGURED_MESSAGE,
+    AI_SERVICE_UNAVAILABLE_MESSAGE,
+    getAiSafetyReply,
+    isAiChatAvailable,
+    QUOTA_EXCEEDED_MESSAGE,
+} from '../services/aiChat';
 
 type MessageType = 'text' | 'image' | 'file' | 'voice' | 'location';
 
@@ -181,7 +187,13 @@ const Chat: React.FC = () => {
                 const reply = await getAiSafetyReply({ userMessage: userMessageContent, conversationHistory: history });
                 setAiTyping(false);
                 if (reply) {
-                    const displayText = reply === QUOTA_EXCEEDED_MESSAGE ? t('chatAiErrorQuota') : reply;
+                    const displayText = reply === QUOTA_EXCEEDED_MESSAGE
+                        ? t('chatAiErrorQuota')
+                        : reply === AI_NOT_CONFIGURED_MESSAGE
+                            ? t('chatAiNotConfigured')
+                            : reply === AI_SERVICE_UNAVAILABLE_MESSAGE
+                                ? t('chatAiErrorUnavailable')
+                                : reply;
                     setMessagesByConversation(prev => {
                         const c = prev[convId] || [];
                         const replyId = Math.max(0, ...c.map(m => m.id), afterId) + 1;

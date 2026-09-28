@@ -17,6 +17,8 @@ const SYSTEM_PROMPT = `You are an AI Safety Assistant for SafeSphere, a disaster
 Keep responses brief (2-4 sentences) unless the user asks for detail. Prioritise actionable advice. If someone reports an urgent emergency (fire, injury, trapped), remind them to call local emergency services (112, 911, etc.) immediately. Respond in the same language the user writes in when possible.`;
 
 export const QUOTA_EXCEEDED_MESSAGE = 'AI is temporarily busy (quota limit). Please try again in a minute, or contact a human responder.';
+export const AI_NOT_CONFIGURED_MESSAGE = 'AI assistant is not configured for this app.';
+export const AI_SERVICE_UNAVAILABLE_MESSAGE = 'AI assistant is temporarily unavailable.';
 
 export interface AiChatOptions {
     userMessage: string;
@@ -50,8 +52,10 @@ async function callEdgeFunction(options: AiChatOptions): Promise<string | null> 
     });
 
     if (res.status === 429) return QUOTA_EXCEEDED_MESSAGE;
-    if (res.status === 503) return null; // AI not configured on server
-    if (!res.ok) return null;
+    if (res.status === 503) return AI_NOT_CONFIGURED_MESSAGE;
+    if (res.status === 502 || res.status >= 500) return AI_SERVICE_UNAVAILABLE_MESSAGE;
+    if (res.status === 404) return null; // Older deployments may not have the function yet.
+    if (!res.ok) return AI_SERVICE_UNAVAILABLE_MESSAGE;
 
     const json = await res.json();
     if (json?.text) return json.text;

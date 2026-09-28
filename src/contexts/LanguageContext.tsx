@@ -1484,7 +1484,7 @@ const translations = {
         chatMsgAdminHelp: 'Hello! How can we help you today?',
         chatMsgRespondersCooperation: 'Thank you for your cooperation. We\'re here 24/7.',
         chatMsgAiIntro: 'Hello! I\'m your AI Safety Assistant. I can help with disaster preparedness, earthquake and flood safety, emergency kits, and more. Ask me anything.',
-        chatAiErrorUnavailable: 'The AI assistant couldn\'t respond right now. Please check your connection and try again, or contact a human responder.',
+        chatAiErrorUnavailable: 'The AI assistant is temporarily unavailable. Please try again shortly or contact a human responder.',
         chatAiErrorQuota: 'The AI is temporarily busy. Please try again in a minute or contact a human responder.',
         chatAiNotConfigured: 'AI assistant is not configured for this app. You can still chat with human responders.',
         aiConnectedReady: 'AI connected • Ready',
