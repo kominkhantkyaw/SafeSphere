@@ -4,8 +4,7 @@
 
 import { corsHeaders } from 'https://esm.sh/@supabase/supabase-js@2/cors';
 
-const MODEL = 'gemini-2.5-flash-lite';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const MODELS = ['gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 const SYSTEM_PROMPT = `You are an AI Safety Assistant for SafeSphere, a disaster preparedness and response app. Your role is to help users with:
 - Disaster preparedness (earthquake, flood, storm, fire)
 - Emergency response guidance when responders may be unavailable
@@ -52,29 +51,35 @@ Deno.serve(async (req) => {
             ...history.map((item) => ({ role: item.role, parts: [{ text: item.text.slice(0, 4000) }] })),
             { role: 'user', parts: [{ text: userMessage }] },
         ];
-        const upstream = await fetch(`${GEMINI_URL}?key=${encodeURIComponent(apiKey)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-                contents,
-                generationConfig: { maxOutputTokens: 256, temperature: 0.7 },
-            }),
-        });
+        for (const model of MODELS) {
+            const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                    contents,
+                    generationConfig: { maxOutputTokens: 256, temperature: 0.7 },
+                }),
+            });
 
-        const data = await upstream.json().catch(() => ({})) as {
-            candidates?: { content?: { parts?: { text?: string }[] } }[];
-            error?: { message?: string };
-        };
-        if (upstream.status === 429) return response({ error: 'AI quota exceeded.' }, 429);
-        if (!upstream.ok) {
-            console.error('[ai-chat] Gemini error:', upstream.status, data.error?.message || 'Unknown upstream error');
-            return response({ error: 'AI provider unavailable.' }, 502);
+            const data = await upstream.json().catch(() => ({})) as {
+                candidates?: { content?: { parts?: { text?: string }[] } }[];
+                error?: { message?: string };
+            };
+            if (upstream.status === 429) return response({ error: 'AI quota exceeded.' }, 429);
+            if (upstream.status === 401 || upstream.status === 403) {
+                console.error('[ai-chat] Gemini credentials rejected:', data.error?.message || 'Invalid API key');
+                return response({ error: 'AI service credentials are invalid.' }, 503);
+            }
+            if (!upstream.ok) {
+                console.warn('[ai-chat] Gemini model failed:', model, upstream.status, data.error?.message || 'Unknown error');
+                continue;
+            }
+
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (text) return response({ text });
         }
-
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (!text) return response({ error: 'AI returned no response.' }, 502);
-        return response({ text });
+        return response({ error: 'AI provider unavailable.' }, 502);
     } catch (error) {
         console.error('[ai-chat] Request failed:', error);
         return response({ error: 'AI service temporarily unavailable.' }, 500);
